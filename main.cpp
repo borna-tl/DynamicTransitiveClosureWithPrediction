@@ -1,5 +1,6 @@
 #include <bits/stdc++.h>
 #include <fstream>
+#include <queue>
 
 using namespace std;
 
@@ -13,31 +14,27 @@ class reachabilityTree{//this is a simple incremental reachability tree for vert
 public:
     reachabilityTree(){}
     reachabilityTree(int vertice_number_):vertice_number(vertice_number_){
-        //should run bfs to initialize
+        //should run bfs to initialize: do we consider the initialization in the timing as well?
         reachable[vertice_number] = true;
     }
-    void add_edge(int u, int v, const map<int, list<int> > &adj){ //read on refrence vs. pointers
+    void add_edge(int u, int v, const vector<vector<int>> &out_edge){ //read on refrence vs. pointers
         if (reachable[v])
             return;
         if (!reachable[u])
             return;
-  
-        list<int> queue;
+        queue<int> q;
         reachable[v] = true;
-        queue.push_back(v);
-        while (!queue.empty()) {
-            v = queue.front();
-            queue.pop_front();
-            for (auto i = adj.at(v).begin(); i != adj.at(v).end(); ++i){
+        q.push(v);
+        while (!q.empty()) {
+            v = q.front();
+            q.pop();
+            for (auto i = out_edge[v].begin(); i != out_edge[v].end(); ++i){
                 if (!reachable[*i]){
-                    // cout << "u is " << u << " and adj is: " << i << endl; 
                     reachable[*i] = true;
-                    // parent[*i] = v;
-                    queue.push_back(*i);
+                    q.push(*i);
                 }
             }
         }
-
     }
     void print_reachability_list(){
         cout << "Reachable Nodes: ";
@@ -57,7 +54,10 @@ class graph{
 public:
     graph(string input_file_, string output_file_):
         input_file(input_file_), output_file(output_file_){
-        source_reachability[6] = new reachabilityTree(6);
+        // source_reachability[6] = new reachabilityTree(6);
+        out_edge.assign(MAX_NODES, vector<int>());
+        in_edge.assign(MAX_NODES, vector<int>());
+
     }
     void run(int mode){
         //it might be faster to read the file once, instead of keeping it open
@@ -77,17 +77,16 @@ public:
                 }
                 else{
                     // cout << "operation is edge insertion on (" << u << ", " << v << ")\n";
-                    adj[u].push_back(v);
-                    adj[v].push_back(u);
-                    source_reachability[6]->add_edge(u, v, adj); //sample
-                    source_reachability[6]->add_edge(v, u, adj); //because it's both ways
+                    out_edge[u].push_back(v);
+                    in_edge[v].push_back(u);
+                    // source_reachability[6]->add_edge(u, v, out_edge); //sample
+                    // source_reachability[6]->add_edge(v, u, adj); //because it's both ways
                 }
             }
         }
         else if (mode == DFS_MODE){
            while (infile >> operation >> u >> v) {
                 if (operation){
-                    // cout << "operation is query on (" << u << ", " << v << ")\n";
                     visited_dfs.clear();
                     bool result = run_dfs(u, v);
                     //maybe optimize writing to file using fwrite
@@ -97,9 +96,8 @@ public:
                     file->close();
                 }
                 else{
-                    // cout << "operation is edge insertion on (" << u << ", " << v << ")\n";
-                    adj[u].push_back(v);
-                    adj[v].push_back(u);
+                    out_edge[u].push_back(v);
+                    in_edge[v].push_back(u); 
                 }
             }
         } 
@@ -115,123 +113,101 @@ public:
                     file->close();
                 }
                 else{
-                    // cout << "operation is edge insertion on (" << u << ", " << v << ")\n";
-                    adj[u].push_back(v);
-                    adj[v].push_back(u);
+                    out_edge[u].push_back(v);
+                    in_edge[v].push_back(u);                     
                 }
             }
         } 
-        source_reachability[6]->print_reachability_list();
+        // source_reachability[6]->print_reachability_list();
         infile.close();
     }
 
 private:
     string input_file, output_file;
-    // bool adj[MAX_NODES][MAX_NODES]; //this will be redundant
-    // bool visited_dfs[MAX_NODES]; 
-    map<int, list<int> > adj; //maybe i should use vector?
+    vector<vector<int>> out_edge; //maybe i should use vector?
+    vector<vector<int>> in_edge; //maybe i should use vector?
     map<int, bool> visited_dfs;
     reachabilityTree* source_reachability[MAX_NODES];
     reachabilityTree sink_reachability[MAX_NODES]; //add functions tomorrow
-    bool run_bfs(int u, int v){   
-        // Mark all the vertices as not visited
+    bool run_bfs(int u, int v){  
         vector<bool> visited; //maybe this should be map<int, bool>?
         visited.resize(MAX_NODES, false);
-    
-        // Create a queue for BFS
-        list<int> queue;
-    
-        // Mark the current node as visited and enqueue it
+        queue<int> q;
         visited[u] = true;
-        queue.push_back(u);
- 
-        while (!queue.empty()) {
-            // Dequeue a vertex from queue
-            u = queue.front();
-            queue.pop_front();
-    
-            // Get all adjacent vertices of the dequeued
-            // vertex s. If a adjacent has not been visited,
-            // then mark it visited and enqueue it
-            list<int>::iterator i;
-            for (i = adj[u].begin(); i != adj[u].end(); ++i){
-                if (!visited[*i]){
-                    // cout << "u is " << u << " and adj is: " << i << endl; 
-                    visited[*i] = true;
-                    queue.push_back(*i);
+        q.push(u); 
+        while (!q.empty()) {
+            u = q.front();
+            q.pop();
+            // vector<int>::iterator i;
+
+            for (int i : out_edge[u]){
+                if (!visited[i]){
+                    visited[i] = true;
+                    q.push(i);
                 }
             }
         }
-
         return visited[v];
     }
     bool run_dfs(int u, int v){
-        // Mark the current node as visited and
         visited_dfs[u] = true;
         if (visited_dfs[v])
             return true;
-        // Recur for all the vertices adjacent
-        // to this vertex
-        list<int>::iterator i;
-        for (i = adj[u].begin(); i != adj[u].end(); ++i){
+        vector<int>::iterator i;
+        for (i = out_edge[u].begin(); i != out_edge[u].end(); ++i){
             if (!visited_dfs[*i]){
-                cout << "dfs going from " << u << " to " << *i << endl;
                 run_dfs(*i, v);
             }
         }
         return visited_dfs[v];
     }
     bool run_bibfs(int u, int v){   
-        // Mark all the vertices as not visited
-        vector<bool> visited_front, visited_back; //maybe we should use map<int, bool>
-        visited_front.resize(MAX_NODES, false);
-        visited_back.resize(MAX_NODES, false);
+        vector<bool> visited_source, visited_sink; //maybe we should use map<int, bool>
+        visited_source.resize(MAX_NODES, false);
+        visited_sink.resize(MAX_NODES, false);
         bool found_path = false;
-        list<int> frontqueue, backqueue;
-    
-        // Mark the current node as visited and enqueue it
-        visited_front[u] = true;
-        visited_back[v] = true;
-        frontqueue.push_back(u);
-        backqueue.push_back(v);
- 
-        while (!found_path && !frontqueue.empty() && !backqueue.empty()) { //i think if one queue is empty we can terminate
-            //running bfs for the front queue one time
-            u = frontqueue.front();
-            frontqueue.pop_front();
-            list<int>::iterator i;
-            for (i = adj[u].begin(); i != adj[u].end(); ++i){
-                if (!visited_front[*i]){
-                    visited_front[*i] = true;
-                    frontqueue.push_back(*i);
+        queue<int> source_queue, sink_queue;
+        visited_source[u] = true;
+        visited_sink[v] = true;
+        source_queue.push(u);
+        sink_queue.push(v);
+        while (!found_path && !source_queue.empty() && !sink_queue.empty()) { //i think if one queue is empty we can terminate
+            //running bfs for the source queue one time
+            u = source_queue.front();
+            source_queue.pop();
+            vector<int>::iterator i;
+            for (i = out_edge[u].begin(); i != out_edge[u].end(); ++i){
+                if (!visited_source[*i]){
+                    visited_source[*i] = true;
+                    source_queue.push(*i);
                 }
-                if (visited_front[*i] && visited_back[*i]){
+                if (visited_source[*i] && visited_sink[*i]){
                     found_path = true;
                 }
             }
             //running bfs for the back queue one time
-            v = backqueue.front();
-            backqueue.pop_front();
-            for (i = adj[v].begin(); i != adj[v].end(); ++i){
-                if (!visited_back[*i]){
-                    visited_back[*i] = true;
-                    backqueue.push_back(*i);
+            v = sink_queue.front();
+            sink_queue.pop();
+            for (i = in_edge[v].begin(); i != in_edge[v].end(); ++i){
+                if (!visited_sink[*i]){
+                    visited_sink[*i] = true;
+                    sink_queue.push(*i);
                 }
-                if (visited_front[*i] && visited_back[*i]){
+                if (visited_source[*i] && visited_sink[*i]){
                     found_path = true;
                 }
             }
         }
-
         return found_path;
-    }
-        
+    }   
 };
 
 
 
-int main(){
+int main(int argc, char* argv[]){
     graph G("sample.txt", "output.txt");
-    G.run(BFS_MODE);
+    G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
+            !strcmp(argv[1], "bfs") ? BFS_MODE :
+                !strcmp(argv[1], "bibfs") ? BIBFS_MODE : BFS_MODE);
     
 }
