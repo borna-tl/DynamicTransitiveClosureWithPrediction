@@ -80,8 +80,7 @@ public:
             cout << "cinstructing algoihms" << endl;
         out_edge.assign(MAX_NODES, vector<int>());
         in_edge.assign(MAX_NODES, vector<int>());
-        visited_bibfs_source.resize(MAX_NODES, false);
-        visited_bibfs_sink.resize(MAX_NODES, false);
+        
     }
     virtual void run(int mode){
         //it might be faster to read the file once, instead of keeping it open
@@ -95,20 +94,7 @@ public:
            
         } 
         else if (mode == BIBFS_MODE){ //note, maybe use multi-directional BFS? can we figure out what that is?
-            while (infile >> operation >> u >> v) {
-                if (operation){
-                    bool result = run_bibfs(u, v);
-                    //maybe optimize writing to file using fwrite
-                    ofstream *file = new ofstream();
-                    file->open(output_file, ios::app); 
-                    (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-                    file->close();
-                }
-                else{
-                    out_edge[u].push_back(v);
-                    in_edge[v].push_back(u);                     
-                }
-            }
+            
         }
         if (mode == SV_MODE){ //fastest way to compute variables?
             vector <int> sv_list = generate_sv_list();
@@ -135,54 +121,8 @@ protected:
     string input_file, output_file;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
-    vector<bool> visited_bibfs_source, visited_bibfs_sink;
     reachabilityTree* reachability_tree[MAX_NODES];
     
-    bool run_bibfs(int u, int v){   
-        
-        bool found_path = false;
-        vector<int> source_queue, sink_queue;
-        int source_pointer = 0;
-        int sink_pointer = 0;
-        visited_bibfs_source[u] = true;
-        visited_bibfs_sink[v] = true;
-        source_queue.push_back(u);
-        sink_queue.push_back(v);
-        while (!found_path && source_pointer < source_queue.size()
-                            && sink_pointer < sink_queue.size()) {
-            //running bfs for the source queue one time
-            u = source_queue[source_pointer];
-            source_pointer++;
-            for (auto i : out_edge[u]){
-                if (!visited_bibfs_source[i]){
-                    visited_bibfs_source[i] = true;
-                    source_queue.push_back(i);
-                }
-                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
-                    found_path = true;
-                }
-            }
-            //running bfs for the back queue one time
-            v = sink_queue[sink_pointer];
-            sink_pointer++;
-            for (auto i : in_edge[v]){
-                if (!visited_bibfs_sink[i]){
-                    visited_bibfs_sink[i] = true;
-                    sink_queue.push_back(i);
-                }
-                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
-                    found_path = true;
-                }
-            }
-        }
-        for (int i : source_queue){
-            visited_bibfs_source[i] = false;
-        }
-        for (int i : sink_queue){
-            visited_bibfs_sink[i] = false;
-        }
-        return found_path;
-    }   
     bool run_sv(int u, int v, const vector<int>& sv_list){  
         cout << "For insertion on (" << u << ", " << v << "): " << endl;
         reachability_tree[6]->print_reachability_list(); //for testing
@@ -211,7 +151,8 @@ protected:
         }
         //fallback to bfs
         cout << "sv not successful, falling back..." << endl;
-        return run_bibfs(u, v); //should be bfs changed for debugging revert it back asap
+        // return Algorithms(input_file, output_file).calculate_bfs(u, v);
+        //get back later
     }
     vector<int> generate_sv_list(){
         vector<int> sv_list;
@@ -322,16 +263,88 @@ private:
     bool round_number;
 };
 
+class Bibfs : public Algorithms{
 
+public:
+    Bibfs(){"BiBFS Default constructor called! Check something...\n";}
+    Bibfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
+        visited_bibfs_source.resize(MAX_NODES, false);
+        visited_bibfs_sink.resize(MAX_NODES, false);
+    }
+    virtual bool calculate_bibfs(int u, int v){  
+        bool found_path = false;
+        vector<int> source_queue, sink_queue;
+        int source_pointer = 0;
+        int sink_pointer = 0;
+        visited_bibfs_source[u] = true;
+        visited_bibfs_sink[v] = true;
+        source_queue.push_back(u);
+        sink_queue.push_back(v);
+        while (!found_path && source_pointer < source_queue.size()
+                            && sink_pointer < sink_queue.size()) {
+            //running bfs for the source queue one time
+            u = source_queue[source_pointer];
+            source_pointer++;
+            for (auto i : out_edge[u]){
+                if (!visited_bibfs_source[i]){
+                    visited_bibfs_source[i] = true;
+                    source_queue.push_back(i);
+                }
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
+                    found_path = true;
+                }
+            }
+            //running bfs for the back queue one time
+            v = sink_queue[sink_pointer];
+            sink_pointer++;
+            for (auto i : in_edge[v]){
+                if (!visited_bibfs_sink[i]){
+                    visited_bibfs_sink[i] = true;
+                    sink_queue.push_back(i);
+                }
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
+                    found_path = true;
+                }
+            }
+        }
+        for (int i : source_queue){
+            visited_bibfs_source[i] = false;
+        }
+        for (int i : sink_queue){
+            visited_bibfs_sink[i] = false;
+        }
+        return found_path;
+    }
+    void run(){
+        ifstream infile(input_file);
+        ofstream *file = new ofstream();
+        file->open(output_file, ios::ate); 
+        bool operation;
+        int u, v;
+        while (infile >> operation >> u >> v) {
+            if (operation){
+                bool result = calculate_bibfs(u, v);                
+                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+            }
+            else{
+                out_edge[u].push_back(v);
+                in_edge[v].push_back(u);
+            }
+        }
+        file->close();
+    }
+private:
+    vector<bool> visited_bibfs_source;
+    vector<bool> visited_bibfs_sink;
 
-
+};
 
 
 
 
 int main(int argc, char* argv[]){
     Algorithms G("sample.txt", "output.txt");
-    Dfs b("sample.txt", "output.txt");
+    Bibfs b("sample.txt", "output.txt");
     b.run();
     
     // G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
