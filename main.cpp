@@ -21,44 +21,32 @@ public:
         r_plus[id] = true;
         r_minus[id] = true;
     }
-    void update_r_plus(int u, int v, const vector<vector<int>> &out_edge){ //read on refrence vs. pointers
-        if (r_plus[v])
+
+    void update(int u, int v, const vector<vector<int>> &out_edge, const vector<vector<int>> &in_edge){
+        update_reachability(u, v, out_edge, true); //source reachability
+        update_reachability(v, u, in_edge, false); //sink reachability
+    }
+    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool type){ //read on refrence vs. pointers
+        bool* r = (type == true) ? &r_plus[0] : &r_minus[0];
+        if (r[v])
             return;
-        if (!r_plus[u])
+        if (!r[u])
             return;
         queue<int> q;
-        r_plus[v] = true;
+        r[v] = true;
         q.push(v);
         while (!q.empty()) {
             v = q.front();
             q.pop();
-            for (auto i = out_edge[v].begin(); i != out_edge[v].end(); ++i){
-                if (!r_plus[*i]){
-                    r_plus[*i] = true;
+            for (auto i = edge[v].begin(); i != edge[v].end(); ++i){
+                if (!r[*i]){
+                    r[*i] = true;
                     q.push(*i);
                 }
             }
         }
     }
-    void update_r_minus(int u, int v, const vector<vector<int>> &in_edge){ //read on refrence vs. pointers
-        if (r_minus[u])
-            return;
-        if (!r_minus[v])
-            return;
-        queue<int> q;
-        r_minus[u] = true;
-        q.push(u);
-        while (!q.empty()) {
-            u = q.front();
-            q.pop();
-            for (auto i = in_edge[u].begin(); i != in_edge[u].end(); ++i){
-                if (!r_minus[*i]){
-                    r_minus[*i] = true;
-                    q.push(*i);
-                }
-            }
-        }
-    }
+    
     void print_reachability_list(){
         cout << "Reachable Nodes from s: ";
         for (int i = 0; i < MAX_NODES; i++)
@@ -258,6 +246,7 @@ private:
         return found_path;
     }   
     bool run_sv(int u, int v, const vector<int>& sv_list){  
+        cout << "For insertion on (" << u << ", " << v << "): " << endl;
         reachability_tree[6]->print_reachability_list(); //for testing
 
         //instead of searching, we can use hash map as well.
@@ -294,8 +283,7 @@ private:
     }
     void update_sv(int u, int v, const vector<int>& sv_list){
         for (auto sv : sv_list){
-            reachability_tree[sv]->update_r_plus(u, v, out_edge);
-            reachability_tree[sv]->update_r_minus(u, v, in_edge); //remove r_minus run on the reverse graph
+            reachability_tree[sv]->update(u, v, out_edge, in_edge);
         }
     }
 };
