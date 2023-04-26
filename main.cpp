@@ -97,22 +97,7 @@ public:
             
         }
         if (mode == SV_MODE){ //fastest way to compute variables?
-            vector <int> sv_list = generate_sv_list();
-            while (infile >> operation >> u >> v) {
-                if (operation){
-                    bool result = run_sv(u, v, sv_list);
-                    //maybe optimize writing to file using fwrite
-                    ofstream *file = new ofstream();
-                    file->open(output_file, ios::app); 
-                    (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-                    file->close();
-                }
-                else{
-                    out_edge[u].push_back(v);
-                    in_edge[v].push_back(u);
-                    update_sv(u, v, sv_list);
-                }
-            }
+            
         } 
         infile.close();
     }
@@ -121,50 +106,8 @@ protected:
     string input_file, output_file;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
-    reachabilityTree* reachability_tree[MAX_NODES];
     
-    bool run_sv(int u, int v, const vector<int>& sv_list){  
-        cout << "For insertion on (" << u << ", " << v << "): " << endl;
-        reachability_tree[6]->print_reachability_list(); //for testing
-
-        //instead of searching, we can use hash map as well.
-        // since |sv| is little, i guess it's better to simply search
-        if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
-            return reachability_tree[u]->reaches(v);
-        }
-        if (find(sv_list.begin(), sv_list.end(), v) != sv_list.end()){
-            return reachability_tree[v]->is_reachable_from(u);
-        }
-        for (auto sv: sv_list){
-            //obs. 1
-            if (reachability_tree[sv]->is_reachable_from(u) && reachability_tree[sv]->reaches(v)){
-                return true;
-            }
-            //obs. 2
-            if (reachability_tree[sv]->reaches(u) && !reachability_tree[sv]->reaches(v)){
-                return false;
-            }
-            //obs. 3
-            if (reachability_tree[sv]->is_reachable_from(v) && !reachability_tree[sv]->is_reachable_from(u)){
-                return false;
-            }
-        }
-        //fallback to bfs
-        cout << "sv not successful, falling back..." << endl;
-        // return Algorithms(input_file, output_file).calculate_bfs(u, v);
-        //get back later
-    }
-    vector<int> generate_sv_list(){
-        vector<int> sv_list;
-        reachability_tree[6] = new reachabilityTree(6); //using node 6 as SV (will add rand later)
-        sv_list.push_back(6);
-        return sv_list;
-    }
-    void update_sv(int u, int v, const vector<int>& sv_list){
-        for (auto sv : sv_list){
-            reachability_tree[sv]->update(u, v, out_edge, in_edge);
-        }
-    }
+    
 };
 
 
@@ -339,12 +282,86 @@ private:
 
 };
 
+class Sv : public Algorithms{
+
+public:
+    Sv(){"Sv Default constructor called! Check something...\n";}
+    Sv(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
+        
+    }
+    bool calculate_sv(int u, int v, const vector<int>& sv_list){  
+        cout << "For insertion on (" << u << ", " << v << "): " << endl;
+        reachability_tree[6]->print_reachability_list(); //for testing
+
+        //instead of searching, we can use hash map as well.
+        // since |sv| is little, i guess it's better to simply search
+        if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
+            return reachability_tree[u]->reaches(v);
+        }
+        if (find(sv_list.begin(), sv_list.end(), v) != sv_list.end()){
+            return reachability_tree[v]->is_reachable_from(u);
+        }
+        for (auto sv: sv_list){
+            //obs. 1
+            if (reachability_tree[sv]->is_reachable_from(u) && reachability_tree[sv]->reaches(v)){
+                return true;
+            }
+            //obs. 2
+            if (reachability_tree[sv]->reaches(u) && !reachability_tree[sv]->reaches(v)){
+                return false;
+            }
+            //obs. 3
+            if (reachability_tree[sv]->is_reachable_from(v) && !reachability_tree[sv]->is_reachable_from(u)){
+                return false;
+            }
+        }
+        //fallback to bfs
+        cout << "sv not successful, falling back..." << endl;
+        return Bfs(input_file, output_file).calculate_bfs(u, v);
+        //get back later
+    
+    }
+    void run(){
+        ifstream infile(input_file);
+        ofstream *file = new ofstream();
+        file->open(output_file, ios::ate); 
+        bool operation;
+        int u, v;
+        vector <int> sv_list = generate_sv_list();
+        while (infile >> operation >> u >> v) {
+            if (operation){
+                bool result = calculate_sv(u, v, sv_list);                
+                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+            }
+            else{
+                out_edge[u].push_back(v);
+                in_edge[v].push_back(u);
+                update_sv(u, v, sv_list);
+            }
+        }
+        file->close();
+
+    }
+private:
+    reachabilityTree* reachability_tree[MAX_NODES];
+    vector<int> generate_sv_list(){
+        vector<int> sv_list;
+        reachability_tree[6] = new reachabilityTree(6); //using node 6 as SV (will add rand later)
+        sv_list.push_back(6);
+        return sv_list;
+    }
+    void update_sv(int u, int v, const vector<int>& sv_list){
+        for (auto sv : sv_list){
+            reachability_tree[sv]->update(u, v, out_edge, in_edge);
+        }
+    }
+};
 
 
 
 int main(int argc, char* argv[]){
     Algorithms G("sample.txt", "output.txt");
-    Bibfs b("sample.txt", "output.txt");
+    Sv b("sample.txt", "output.txt");
     b.run();
     
     // G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
