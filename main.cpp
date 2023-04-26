@@ -72,53 +72,27 @@ private:
     bool r_minus[MAX_NODES]; // is node s reachable from u? u--->?--->s 
 };
 
-class graph{
+class Algorithms{
 public:
-    graph(string input_file_, string output_file_):
+    Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
+    Algorithms(string input_file_, string output_file_):
         input_file(input_file_), output_file(output_file_){
+            cout << "cinstructing algoihms" << endl;
         out_edge.assign(MAX_NODES, vector<int>());
         in_edge.assign(MAX_NODES, vector<int>());
-        visited_bfs.resize(MAX_NODES, false);
         visited_bibfs_source.resize(MAX_NODES, false);
         visited_bibfs_sink.resize(MAX_NODES, false);
     }
-    void run(int mode){
+    virtual void run(int mode){
         //it might be faster to read the file once, instead of keeping it open
         ifstream infile(input_file);
         bool operation;
         int u, v;
         if (mode == BFS_MODE){ //fastest way to compute variables?
-            while (infile >> operation >> u >> v) {
-                if (operation){
-                    bool result = run_bfs(u, v);
-                    //maybe optimize writing to file using fwrite
-                    ofstream *file = new ofstream();
-                    file->open(output_file, ios::app); 
-                    (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-                    file->close();
-                }
-                else{
-                    out_edge[u].push_back(v);
-                    in_edge[v].push_back(u);
-                }
-            }
+            
         }
         else if (mode == DFS_MODE){
-           while (infile >> operation >> u >> v) {
-                if (operation){
-                    visited_dfs.clear();
-                    bool result = run_dfs(u, v);
-                    //maybe optimize writing to file using fwrite
-                    ofstream *file = new ofstream();
-                    file->open(output_file, ios::app); 
-                    (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-                    file->close();
-                }
-                else{
-                    out_edge[u].push_back(v);
-                    in_edge[v].push_back(u); 
-                }
-            }
+           
         } 
         else if (mode == BIBFS_MODE){ //note, maybe use multi-directional BFS? can we figure out what that is?
             while (infile >> operation >> u >> v) {
@@ -157,47 +131,13 @@ public:
         infile.close();
     }
 
-private:
+protected:
     string input_file, output_file;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
-    map<int, bool> visited_dfs;
-    vector<bool> visited_bfs; //in order to reduce resizing cost
     vector<bool> visited_bibfs_source, visited_bibfs_sink;
     reachabilityTree* reachability_tree[MAX_NODES];
-    bool run_bfs(int u, int v){  
-        vector<int> q;
-        int pointer = 0;
-        visited_bfs[u] = true;
-        q.push_back(u); 
-        while (pointer < q.size()) {
-            u = q[pointer];
-            pointer++;
-            for (int i : out_edge[u]){
-                if (!visited_bfs[i]){
-                    visited_bfs[i] = true;
-                    q.push_back(i);
-                }
-            }
-        }
-        bool ans = visited_bfs[v];
-        for (int i : q){
-            visited_bfs[i] = false;
-        }
-        return ans;
-    }
-    bool run_dfs(int u, int v){
-        visited_dfs[u] = true;
-        if (visited_dfs[v])
-            return true;
-        vector<int>::iterator i;
-        for (i = out_edge[u].begin(); i != out_edge[u].end(); ++i){
-            if (!visited_dfs[*i]){
-                run_dfs(*i, v);
-            }
-        }
-        return visited_dfs[v];
-    }
+    
     bool run_bibfs(int u, int v){   
         
         bool found_path = false;
@@ -213,25 +153,24 @@ private:
             //running bfs for the source queue one time
             u = source_queue[source_pointer];
             source_pointer++;
-            vector<int>::iterator i;
-            for (i = out_edge[u].begin(); i != out_edge[u].end(); ++i){
-                if (!visited_bibfs_source[*i]){
-                    visited_bibfs_source[*i] = true;
-                    source_queue.push_back(*i);
+            for (auto i : out_edge[u]){
+                if (!visited_bibfs_source[i]){
+                    visited_bibfs_source[i] = true;
+                    source_queue.push_back(i);
                 }
-                if (visited_bibfs_source[*i] && visited_bibfs_sink[*i]){
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
                     found_path = true;
                 }
             }
             //running bfs for the back queue one time
             v = sink_queue[sink_pointer];
             sink_pointer++;
-            for (i = in_edge[v].begin(); i != in_edge[v].end(); ++i){
-                if (!visited_bibfs_sink[*i]){
-                    visited_bibfs_sink[*i] = true;
-                    sink_queue.push_back(*i);
+            for (auto i : in_edge[v]){
+                if (!visited_bibfs_sink[i]){
+                    visited_bibfs_sink[i] = true;
+                    sink_queue.push_back(i);
                 }
-                if (visited_bibfs_source[*i] && visited_bibfs_sink[*i]){
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
                     found_path = true;
                 }
             }
@@ -272,7 +211,7 @@ private:
         }
         //fallback to bfs
         cout << "sv not successful, falling back..." << endl;
-        return run_bfs(u, v);
+        return run_bibfs(u, v); //should be bfs changed for debugging revert it back asap
     }
     vector<int> generate_sv_list(){
         vector<int> sv_list;
@@ -288,13 +227,117 @@ private:
 };
 
 
+class Bfs : public Algorithms{
+
+public:
+    Bfs(){"BFS Default constructor called! Check something...\n";}
+    Bfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
+        visited_bfs.resize(MAX_NODES, false);
+    }
+    bool calculate_bfs(int u, int v){  
+        vector<int> q;
+        int pointer = 0;
+        visited_bfs[u] = true;
+        q.push_back(u); 
+        while (pointer < q.size()) {
+            u = q[pointer];
+            pointer++;
+            for (int i : out_edge[u]){
+                if (!visited_bfs[i]){
+                    visited_bfs[i] = true;
+                    q.push_back(i);
+                }
+            }
+        }
+        bool ans = visited_bfs[v];
+        for (int i : q){
+            visited_bfs[i] = false;
+        }
+        return ans;
+    }
+    void run(){
+        ifstream infile(input_file);
+        ofstream *file = new ofstream();
+        file->open(output_file, ios::ate); 
+        bool operation;
+        int u, v;
+        while (infile >> operation >> u >> v) {
+            if (operation){
+                bool result = calculate_bfs(u, v);                
+                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+            }
+            else{
+                out_edge[u].push_back(v);
+                in_edge[v].push_back(u);
+            }
+        }
+        file->close();
+    }
+private:
+    vector<bool> visited_bfs; //in order to reduce resizing cost
+};
+
+class Dfs : public Algorithms{
+
+public:
+    Dfs(){"DFS Default constructor called! Check something...\n\n";}
+    Dfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
+        visited_dfs.resize(MAX_NODES, false);
+        round_number = false;
+    }
+    bool calculate_dfs(int u, int v){  //maybe we should try non-iterative dfs as well
+        visited_dfs[u] = true;
+        if (visited_dfs[v]){
+            return true;
+        }
+        for (auto i : out_edge[u]){
+            if (!visited_dfs[i]){
+                calculate_dfs(i, v);
+            }
+        }
+        return visited_dfs[v];
+    }
+    void run(){
+        ifstream infile(input_file);
+        ofstream *file = new ofstream();
+        file->open(output_file, ios::ate); 
+        bool operation;
+        int u, v;
+        while (infile >> operation >> u >> v) {
+            if (operation){
+                visited_dfs.clear();
+                visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
+                bool result = calculate_dfs(u, v);
+                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+            }
+            else{
+                out_edge[u].push_back(v);
+                in_edge[v].push_back(u); 
+            }
+        }
+        file->close();
+    }
+private:
+    vector<bool> visited_dfs;
+    bool round_number;
+};
+
+
+
+
+
+
+
 
 int main(int argc, char* argv[]){
-    graph G("sample.txt", "output.txt");
-    G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
-            !strcmp(argv[1], "bfs") ? BFS_MODE :
-                !strcmp(argv[1], "bibfs") ? BIBFS_MODE :
-                    !strcmp(argv[1], "sv") ? SV_MODE : BFS_MODE);
+    Algorithms G("sample.txt", "output.txt");
+    Dfs b("sample.txt", "output.txt");
+    b.run();
+    
+    // G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
+    //         !strcmp(argv[1], "bfs") ? BFS_MODE :
+    //             !strcmp(argv[1], "bibfs") ? BIBFS_MODE :
+    //                 !strcmp(argv[1], "sv") ? SV_MODE : BFS_MODE);
 
     
 }
