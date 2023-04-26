@@ -6,4 +6,4 @@ to compile:
 
 <pre><code> ./main <i>algorithm_name</i> </code></pre>
 
-where *algorithm_name* = {bfs, dfs, bibfs, ...}
+where *algorithm_name* = {bfs, dfs, bibfs, sv, ...}
