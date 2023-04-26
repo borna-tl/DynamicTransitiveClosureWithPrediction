@@ -23,11 +23,10 @@ public:
     }
 
     void update(int u, int v, const vector<vector<int>> &out_edge, const vector<vector<int>> &in_edge){
-        update_reachability(u, v, out_edge, true); //source reachability
-        update_reachability(v, u, in_edge, false); //sink reachability
+        update_reachability(u, v, out_edge, r_plus); //source reachability
+        update_reachability(v, u, in_edge, r_minus); //sink reachability
     }
-    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool type){ //read on refrence vs. pointers
-        bool* r = (type == true) ? &r_plus[0] : &r_minus[0];
+    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool* r){ //read on refrence vs. pointers
         if (r[v])
             return;
         if (!r[u])
