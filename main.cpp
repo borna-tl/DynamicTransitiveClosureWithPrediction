@@ -11,7 +11,6 @@ using namespace std;
 #define BIBFS_MODE 3
 #define SV_MODE 4
 
-//class algorithm with child that handle insertion and queries (like bfs, dfs, etc)
 
 class reachabilityTree{//this is a simple incremental reachability tree for vertex s
 public:
@@ -37,10 +36,10 @@ public:
         while (!q.empty()) {
             v = q.front();
             q.pop();
-            for (auto i = edge[v].begin(); i != edge[v].end(); ++i){
-                if (!r[*i]){
-                    r[*i] = true;
-                    q.push(*i);
+            for (auto i : edge[v]){
+                if (!r[i]){
+                    r[i] = true;
+                    q.push(i);
                 }
             }
         }
@@ -77,37 +76,37 @@ public:
     Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
     Algorithms(string input_file_, string output_file_):
         input_file(input_file_), output_file(output_file_){
-            cout << "cinstructing algoihms" << endl;
         out_edge.assign(MAX_NODES, vector<int>());
         in_edge.assign(MAX_NODES, vector<int>());
         
     }
-    virtual void run(int mode){
-        //it might be faster to read the file once, instead of keeping it open
+    virtual bool answer_query(int u, int v)=0; //should i remove this?
+    void run(){
         ifstream infile(input_file);
+        ofstream *file = new ofstream();
+        file->open(output_file, ios::ate); 
         bool operation;
         int u, v;
-        if (mode == BFS_MODE){ //fastest way to compute variables?
-            
+        while (infile >> operation >> u >> v) {
+            if (operation){
+                bool result = answer_query(u, v);                
+                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+            }
+            else{
+                add_edge(u, v);
+            }
         }
-        else if (mode == DFS_MODE){
-           
-        } 
-        else if (mode == BIBFS_MODE){ //note, maybe use multi-directional BFS? can we figure out what that is?
-            
-        }
-        if (mode == SV_MODE){ //fastest way to compute variables?
-            
-        } 
+        file->close();
         infile.close();
     }
-
 protected:
     string input_file, output_file;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
-    
-    
+    virtual void add_edge(int u, int v){
+        out_edge[u].push_back(v);
+        in_edge[v].push_back(u);
+    }
 };
 
 
@@ -139,23 +138,8 @@ public:
         }
         return ans;
     }
-    void run(){
-        ifstream infile(input_file);
-        ofstream *file = new ofstream();
-        file->open(output_file, ios::ate); 
-        bool operation;
-        int u, v;
-        while (infile >> operation >> u >> v) {
-            if (operation){
-                bool result = calculate_bfs(u, v);                
-                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-            }
-            else{
-                out_edge[u].push_back(v);
-                in_edge[v].push_back(u);
-            }
-        }
-        file->close();
+    bool answer_query(int u, int v){
+        return calculate_bfs(u, v);                
     }
 private:
     vector<bool> visited_bfs; //in order to reduce resizing cost
@@ -181,25 +165,10 @@ public:
         }
         return visited_dfs[v];
     }
-    void run(){
-        ifstream infile(input_file);
-        ofstream *file = new ofstream();
-        file->open(output_file, ios::ate); 
-        bool operation;
-        int u, v;
-        while (infile >> operation >> u >> v) {
-            if (operation){
-                visited_dfs.clear();
-                visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
-                bool result = calculate_dfs(u, v);
-                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-            }
-            else{
-                out_edge[u].push_back(v);
-                in_edge[v].push_back(u); 
-            }
-        }
-        file->close();
+    bool answer_query(int u, int v){
+        visited_dfs.clear();
+        visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
+        return calculate_dfs(u, v);
     }
 private:
     vector<bool> visited_dfs;
@@ -258,23 +227,8 @@ public:
         }
         return found_path;
     }
-    void run(){
-        ifstream infile(input_file);
-        ofstream *file = new ofstream();
-        file->open(output_file, ios::ate); 
-        bool operation;
-        int u, v;
-        while (infile >> operation >> u >> v) {
-            if (operation){
-                bool result = calculate_bibfs(u, v);                
-                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-            }
-            else{
-                out_edge[u].push_back(v);
-                in_edge[v].push_back(u);
-            }
-        }
-        file->close();
+    bool answer_query(int u, int v){
+        return calculate_bibfs(u, v);                
     }
 private:
     vector<bool> visited_bibfs_source;
@@ -287,9 +241,9 @@ class Sv : public Algorithms{
 public:
     Sv(){"Sv Default constructor called! Check something...\n";}
     Sv(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
-        
+        generate_sv_list();
     }
-    bool calculate_sv(int u, int v, const vector<int>& sv_list){  
+    bool calculate_sv(int u, int v){  
         cout << "For insertion on (" << u << ", " << v << "): " << endl;
         reachability_tree[6]->print_reachability_list(); //for testing
 
@@ -318,56 +272,48 @@ public:
         //fallback to bfs
         cout << "sv not successful, falling back..." << endl;
         return Bfs(input_file, output_file).calculate_bfs(u, v);
-        //get back later
-    
     }
-    void run(){
-        ifstream infile(input_file);
-        ofstream *file = new ofstream();
-        file->open(output_file, ios::ate); 
-        bool operation;
-        int u, v;
-        vector <int> sv_list = generate_sv_list();
-        while (infile >> operation >> u >> v) {
-            if (operation){
-                bool result = calculate_sv(u, v, sv_list);                
-                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
-            }
-            else{
-                out_edge[u].push_back(v);
-                in_edge[v].push_back(u);
-                update_sv(u, v, sv_list);
-            }
-        }
-        file->close();
-
+    bool answer_query (int u, int v){
+        return calculate_sv(u, v);                
     }
 private:
     reachabilityTree* reachability_tree[MAX_NODES];
-    vector<int> generate_sv_list(){
-        vector<int> sv_list;
+    vector <int> sv_list;
+    void generate_sv_list(){
         reachability_tree[6] = new reachabilityTree(6); //using node 6 as SV (will add rand later)
         sv_list.push_back(6);
-        return sv_list;
     }
-    void update_sv(int u, int v, const vector<int>& sv_list){
+    void update_sv(int u, int v){
         for (auto sv : sv_list){
             reachability_tree[sv]->update(u, v, out_edge, in_edge);
         }
     }
+    void add_edge(int u, int v){
+        out_edge[u].push_back(v);
+        in_edge[v].push_back(u);
+        update_sv(u, v);
+    }
 };
 
 
-
 int main(int argc, char* argv[]){
-    Algorithms G("sample.txt", "output.txt");
-    Sv b("sample.txt", "output.txt");
-    b.run();
-    
-    // G.run(!strcmp(argv[1], "dfs") ? DFS_MODE :
-    //         !strcmp(argv[1], "bfs") ? BFS_MODE :
-    //             !strcmp(argv[1], "bibfs") ? BIBFS_MODE :
-    //                 !strcmp(argv[1], "sv") ? SV_MODE : BFS_MODE);
-
-    
+    if (!strcmp(argv[1], "dfs")){
+        Dfs alg("sample.txt", "output.txt");
+        alg.run();
+    }
+    else if (!strcmp(argv[1], "bfs")){
+        Bfs alg("sample.txt", "output.txt");
+        alg.run();
+    }
+    else if (!strcmp(argv[1], "bibfs")){
+        Bibfs alg("sample.txt", "output.txt");
+        alg.run();
+    }
+    else if (!strcmp(argv[1], "sv")){
+        Sv alg("sample.txt", "output.txt");
+        alg.run();
+    }
+    else{
+        cerr << "Wrong input" << endl;
+    }
 }
