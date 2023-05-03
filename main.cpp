@@ -3,9 +3,10 @@
 #include <queue>
 
 using namespace std;
+using u32    = uint_least32_t; 
+using engine = std::mt19937;
 
-
-#define MAX_NODES 1000+7
+#define MAX_NODES 900000+7
 #define BFS_MODE 1
 #define DFS_MODE 2
 #define BIBFS_MODE 3
@@ -80,22 +81,35 @@ public:
         in_edge.assign(MAX_NODES, vector<int>());
         
     }
-    virtual bool answer_query(int u, int v)=0; //should i remove this?
+    virtual bool answer_query(int u, int v) = 0; 
     void run(){
         ifstream infile(input_file);
         ofstream *file = new ofstream();
         file->open(output_file, ios::ate); 
+        
+        random_device os_seed;
+        engine generator(2334);
+        uniform_int_distribution< u32 > distribute(1, 10000);
+        
         bool operation;
         int u, v;
-        while (infile >> operation >> u >> v) {
-            if (operation){
-                bool result = answer_query(u, v);                
-                (*file) << "(" << u << ", " << v << ") is: " << result << endl;
+        // while (infile >> operation>> u >> v) {
+        clock_t tStart = clock();
+        int queries_answered = 0, true_q = 0;
+        while (infile >> u >> v){
+            if (distribute(generator) < 2){
+                bool result = answer_query(u, v);   
+                queries_answered++;          
+                true_q += (result == true); 
+                // (*file) << "(" << u << ", " << v << ") is: " << result << endl;
             }
             else{
                 add_edge(u, v);
             }
         }
+        printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
+        cout << "Queries answered: " << queries_answered << endl;
+        cout << "Reachable queries: " << true_q << endl;
         file->close();
         infile.close();
     }
@@ -151,28 +165,37 @@ public:
     Dfs(){"DFS Default constructor called! Check something...\n\n";}
     Dfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
         visited_dfs.resize(MAX_NODES, false);
-        round_number = false;
     }
     bool calculate_dfs(int u, int v){  //maybe we should try non-iterative dfs as well
+        if (u >= visited_dfs.size() || u < 0 || v < 0 || v >= visited_dfs.size()){
+            exit(0);
+        }
         visited_dfs[u] = true;
         if (visited_dfs[v]){
             return true;
         }
         for (auto i : out_edge[u]){
-            if (!visited_dfs[i]){
+            if (i < 0 || i >= visited_dfs.size()){
+                exit(0);
+            }
+            if (!(visited_dfs[i])){
                 calculate_dfs(i, v);
             }
         }
         return visited_dfs[v];
     }
     bool answer_query(int u, int v){
-        visited_dfs.clear();
-        visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
+        // visited_dfs->clear();
+        // fill(visited_dfs->begin(), visited_dfs->end(), 0);
+        cout << "vector size is: " << visited_dfs.size() << endl;
+        for (auto v: visited_dfs)
+            v = false;
+        // visited_dfs->assign(visited_dfs->size(), false);
+        // visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
         return calculate_dfs(u, v);
     }
 private:
     vector<bool> visited_dfs;
-    bool round_number;
 };
 
 class Bibfs : public Algorithms{
@@ -242,10 +265,12 @@ public:
     Sv(){"Sv Default constructor called! Check something...\n";}
     Sv(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
         generate_sv_list();
+        fallback = new Bibfs("sample.txt", "output.txt");
+
     }
     bool calculate_sv(int u, int v){  
-        cout << "For insertion on (" << u << ", " << v << "): " << endl;
-        reachability_tree[6]->print_reachability_list(); //for testing
+        // cout << "For insertion on (" << u << ", " << v << "): " << endl;
+        // reachability_tree[6]->print_reachability_list(); //for testing
 
         //instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
@@ -270,8 +295,9 @@ public:
             }
         }
         //fallback to bfs
-        cout << "sv not successful, falling back..." << endl;
-        return Bfs(input_file, output_file).calculate_bfs(u, v);
+        // cout << "sv not successful, falling back..." << endl;
+        // return Bibfs(input_file, output_file).calculate_bibfs(u, v);
+        return fallback->calculate_bibfs(u, v);
     }
     bool answer_query (int u, int v){
         return calculate_sv(u, v);                
@@ -279,9 +305,14 @@ public:
 private:
     reachabilityTree* reachability_tree[MAX_NODES];
     vector <int> sv_list;
+    Bibfs* fallback;
     void generate_sv_list(){
-        reachability_tree[6] = new reachabilityTree(6); //using node 6 as SV (will add rand later)
-        sv_list.push_back(6);
+        // vector<int> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
+        vector<int> svs = {0};
+        for (auto sv : svs){
+            reachability_tree[sv] = new reachabilityTree(sv); //using node sv as new SV
+            sv_list.push_back(sv);
+        }
     }
     void update_sv(int u, int v){
         for (auto sv : sv_list){
