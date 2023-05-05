@@ -7,16 +7,12 @@ using u32    = uint_least32_t;
 using engine = std::mt19937;
 
 #define MAX_NODES 900000+7
-#define BFS_MODE 1
-#define DFS_MODE 2
-#define BIBFS_MODE 3
-#define SV_MODE 4
 
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
 
 
-class reachabilityTree{//this is a simple incremental reachability tree for vertex s
+class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
     reachabilityTree(){}
     reachabilityTree(int id_):id(id_){
@@ -50,12 +46,12 @@ public:
     }
     
     void print_reachability_list(){
-        cout << "Reachable Nodes from s: ";
+        cout << "Reachable Nodes from " << id << ": ";
         for (int i = 0; i < MAX_NODES; i++)
             if (r_plus[i])
                 cout << i << " ";
         cout << endl;
-        cout << "Reachable Nodes to s: ";
+        cout << "Reachable Nodes to " << id << ": ";
         for (int i = 0; i < MAX_NODES; i++)
             if (r_minus[i])
                 cout << i << " ";
@@ -79,27 +75,21 @@ class Algorithms{
 public:
     // Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
     Algorithms(){
-            //open meta and determine max nodes
         ifstream infile(META_FILE);
         infile >> nodes;
-        cout << "Max nodes was: " << nodes << endl; 
         out_edge.assign(nodes, vector<int>());
         in_edge.assign(nodes, vector<int>());
-        
+        infile.close();
     }
     virtual bool answer_query(int u, int v) = 0; 
     void run(){
         ifstream infile(INPUT_FILE);
-        // ofstream *file = new ofstream();
-        // file->open(meta_file, ios::ate); 
         
         random_device os_seed;
         engine generator(2334);
         uniform_int_distribution< u32 > distribute(1, 10000);
         
-        // bool operation;
         int u, v;
-        // while (infile >> operation>> u >> v) {
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0;
         while (infile >> u >> v){
@@ -107,7 +97,6 @@ public:
                 bool result = answer_query(u, v);   
                 queries_answered++;          
                 true_q += (result == true); 
-                // (*file) << "(" << u << ", " << v << ") is: " << result << endl;
             }
             else{
                 add_edge(u, v);
@@ -116,11 +105,9 @@ public:
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
-        // file->close();
         infile.close();
     }
 protected:
-    // string input_file, meta_file;
     int nodes;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
@@ -162,7 +149,7 @@ public:
         return calculate_bfs(u, v);                
     }
 private:
-    vector<bool> visited_bfs; //in order to reduce resizing cost
+    vector<bool> visited_bfs; 
 };
 
 class Dfs : public Algorithms{
@@ -184,13 +171,8 @@ public:
         }
         return visited_dfs[v];
     }
-    bool answer_query(int u, int v){
-        // visited_dfs->clear();
-        // fill(visited_dfs->begin(), visited_dfs->end(), 0);
-        for (auto v: visited_dfs)
-            v = false;
-        // visited_dfs->assign(visited_dfs->size(), false);
-        // visited_dfs.resize(MAX_NODES, false); //maybe not so efficient
+    bool answer_query(int u, int v){       
+        visited_dfs.assign(visited_dfs.size(), false);
         return calculate_dfs(u, v);
     }
 private:
@@ -201,8 +183,6 @@ class Bibfs : public Algorithms{
 
 public:
     Bibfs() : Algorithms(){
-        cout << "bibfs was called" << endl;
-
         visited_bibfs_source.resize(nodes, false);
         visited_bibfs_sink.resize(nodes, false);
     }
@@ -268,9 +248,6 @@ public:
 
     }
     bool calculate_sv(int u, int v){  
-        // cout << "For insertion on (" << u << ", " << v << "): " << endl;
-        // reachability_tree[6]->print_reachability_list(); //for testing
-
         //instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
         if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
@@ -294,7 +271,6 @@ public:
             }
         }
         //fallback to bfs
-        // cout << "sv not successful, falling back..." << endl;
         // return Bibfs(input_file, output_file).calculate_bibfs(u, v);
         return fallback->calculate_bibfs(u, v);
     }
