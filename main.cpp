@@ -73,10 +73,10 @@ private:
 
 class Algorithms{
 public:
-    // Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
     Algorithms(){
         ifstream infile(META_FILE);
         infile >> nodes;
+        nodes++; //because input file is zero-based
         out_edge.assign(nodes, vector<int>());
         in_edge.assign(nodes, vector<int>());
         infile.close();
@@ -85,23 +85,27 @@ public:
     void run(){
         ifstream infile(INPUT_FILE);
         
-        random_device os_seed;
+        // random_device os_seed; //can use later for seeding engine.
         engine generator(2334);
-        uniform_int_distribution< u32 > distribute(1, 10000);
-        
+        engine query_generator(1223);
+        uniform_int_distribution< u32 > distribute(0, 99);
+        uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
+
         int u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0;
         while (infile >> u >> v){
-            if (distribute(generator) < 2){
-                bool result = answer_query(u, v);   
-                queries_answered++;          
+            while (distribute(generator) < 33){
+                int u_q = query_chance_distribute(query_generator);
+                int v_q = query_chance_distribute(query_generator);
+                bool result = answer_query(u_q, v_q);   
+                queries_answered ++;          
                 true_q += (result == true); 
+                //TBD: add correctness checking
             }
-            else{
-                add_edge(u, v);
-            }
+            add_edge(u, v);
         }
+
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
@@ -156,7 +160,6 @@ class Dfs : public Algorithms{
 
 public:
     Dfs() : Algorithms(){
-        cout << "dfs was called" << endl;
         visited_dfs.resize(nodes, false);
     }
     bool calculate_dfs(int u, int v){ 
