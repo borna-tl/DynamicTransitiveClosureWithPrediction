@@ -12,6 +12,9 @@ using engine = std::mt19937;
 #define BIBFS_MODE 3
 #define SV_MODE 4
 
+#define INPUT_FILE "sample.txt"
+#define META_FILE "meta-sample.txt"
+
 
 class reachabilityTree{//this is a simple incremental reachability tree for vertex s
 public:
@@ -74,24 +77,27 @@ private:
 
 class Algorithms{
 public:
-    Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
-    Algorithms(string input_file_, string output_file_):
-        input_file(input_file_), output_file(output_file_){
-        out_edge.assign(MAX_NODES, vector<int>());
-        in_edge.assign(MAX_NODES, vector<int>());
+    // Algorithms(){cout << "Algorithm Default constructor called! Check something...\n";}
+    Algorithms(){
+            //open meta and determine max nodes
+        ifstream infile(META_FILE);
+        infile >> nodes;
+        cout << "Max nodes was: " << nodes << endl; 
+        out_edge.assign(nodes, vector<int>());
+        in_edge.assign(nodes, vector<int>());
         
     }
     virtual bool answer_query(int u, int v) = 0; 
     void run(){
-        ifstream infile(input_file);
-        ofstream *file = new ofstream();
-        file->open(output_file, ios::ate); 
+        ifstream infile(INPUT_FILE);
+        // ofstream *file = new ofstream();
+        // file->open(meta_file, ios::ate); 
         
         random_device os_seed;
         engine generator(2334);
         uniform_int_distribution< u32 > distribute(1, 10000);
         
-        bool operation;
+        // bool operation;
         int u, v;
         // while (infile >> operation>> u >> v) {
         clock_t tStart = clock();
@@ -110,11 +116,12 @@ public:
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
-        file->close();
+        // file->close();
         infile.close();
     }
 protected:
-    string input_file, output_file;
+    // string input_file, meta_file;
+    int nodes;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
     virtual void add_edge(int u, int v){
@@ -127,13 +134,12 @@ protected:
 class Bfs : public Algorithms{
 
 public:
-    Bfs(){"BFS Default constructor called! Check something...\n";}
-    Bfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
-        visited_bfs.resize(MAX_NODES, false);
+    Bfs() : Algorithms(){
+        visited_bfs.resize(nodes, false);
     }
     bool calculate_bfs(int u, int v){  
         vector<int> q;
-        int pointer = 0;
+        size_t pointer = 0;
         visited_bfs[u] = true;
         q.push_back(u); 
         while (pointer < q.size()) {
@@ -162,22 +168,16 @@ private:
 class Dfs : public Algorithms{
 
 public:
-    Dfs(){"DFS Default constructor called! Check something...\n\n";}
-    Dfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
-        visited_dfs.resize(MAX_NODES, false);
+    Dfs() : Algorithms(){
+        cout << "dfs was called" << endl;
+        visited_dfs.resize(nodes, false);
     }
-    bool calculate_dfs(int u, int v){  //maybe we should try non-iterative dfs as well
-        if (u >= visited_dfs.size() || u < 0 || v < 0 || v >= visited_dfs.size()){
-            exit(0);
-        }
+    bool calculate_dfs(int u, int v){ 
         visited_dfs[u] = true;
         if (visited_dfs[v]){
             return true;
         }
         for (auto i : out_edge[u]){
-            if (i < 0 || i >= visited_dfs.size()){
-                exit(0);
-            }
             if (!(visited_dfs[i])){
                 calculate_dfs(i, v);
             }
@@ -187,7 +187,6 @@ public:
     bool answer_query(int u, int v){
         // visited_dfs->clear();
         // fill(visited_dfs->begin(), visited_dfs->end(), 0);
-        cout << "vector size is: " << visited_dfs.size() << endl;
         for (auto v: visited_dfs)
             v = false;
         // visited_dfs->assign(visited_dfs->size(), false);
@@ -201,16 +200,17 @@ private:
 class Bibfs : public Algorithms{
 
 public:
-    Bibfs(){"BiBFS Default constructor called! Check something...\n";}
-    Bibfs(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
-        visited_bibfs_source.resize(MAX_NODES, false);
-        visited_bibfs_sink.resize(MAX_NODES, false);
+    Bibfs() : Algorithms(){
+        cout << "bibfs was called" << endl;
+
+        visited_bibfs_source.resize(nodes, false);
+        visited_bibfs_sink.resize(nodes, false);
     }
     virtual bool calculate_bibfs(int u, int v){  
         bool found_path = false;
         vector<int> source_queue, sink_queue;
-        int source_pointer = 0;
-        int sink_pointer = 0;
+        size_t source_pointer = 0;
+        size_t sink_pointer = 0;
         visited_bibfs_source[u] = true;
         visited_bibfs_sink[v] = true;
         source_queue.push_back(u);
@@ -262,10 +262,9 @@ private:
 class Sv : public Algorithms{
 
 public:
-    Sv(){"Sv Default constructor called! Check something...\n";}
-    Sv(string input_file_, string output_file_) : Algorithms(input_file_, output_file_){
+    Sv() : Algorithms(){
         generate_sv_list();
-        fallback = new Bibfs("sample.txt", "output.txt");
+        fallback = new Bibfs();
 
     }
     bool calculate_sv(int u, int v){  
@@ -329,19 +328,19 @@ private:
 
 int main(int argc, char* argv[]){
     if (!strcmp(argv[1], "dfs")){
-        Dfs alg("sample.txt", "output.txt");
+        Dfs alg;
         alg.run();
     }
     else if (!strcmp(argv[1], "bfs")){
-        Bfs alg("sample.txt", "output.txt");
+        Bfs alg;
         alg.run();
     }
     else if (!strcmp(argv[1], "bibfs")){
-        Bibfs alg("sample.txt", "output.txt");
+        Bibfs alg;
         alg.run();
     }
     else if (!strcmp(argv[1], "sv")){
-        Sv alg("sample.txt", "output.txt");
+        Sv alg;
         alg.run();
     }
     else{
