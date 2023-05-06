@@ -10,6 +10,7 @@ using engine = std::mt19937;
 
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
+#define OUTPUT_FILE "output.txt"
 
 
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
@@ -101,7 +102,7 @@ public:
                 bool result = answer_query(u_q, v_q);   
                 queries_answered ++;          
                 true_q += (result == true); 
-                //TBD: add correctness checking
+                results.push_back(result);
             }
             add_edge(u, v);
         }
@@ -110,11 +111,16 @@ public:
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
         infile.close();
+        ofstream outfile(OUTPUT_FILE, ios_base::app);
+        ostream_iterator<string> output_iterator(outfile, "");
+        outfile << hash<vector<bool>>{}(results) << "\n";
+        outfile.close();
     }
 protected:
     int nodes;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
+    vector <bool> results;
     virtual void add_edge(int u, int v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
@@ -306,6 +312,9 @@ private:
 
 
 int main(int argc, char* argv[]){
+    ofstream outfile(OUTPUT_FILE, ios_base::app);
+    outfile << "The result for " << argv[1] << ": ";
+    outfile.close();
     if (!strcmp(argv[1], "dfs")){
         Dfs alg;
         alg.run();
