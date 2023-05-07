@@ -1,17 +1,46 @@
 #include <bits/stdc++.h>
 #include <fstream>
 #include <queue>
+#include <string>
+#include <sstream> 
 
 using namespace std;
 using u32    = uint_least32_t; 
 using engine = std::mt19937;
 
 #define MAX_NODES 900000+7
+#define OPERATION_SEED 1223
+#define QUERY_SEED 2334
 
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
 #define OUTPUT_FILE "output.txt"
+#define LOG_FILE "log.txt"
 
+using time_point = std::chrono::system_clock::time_point;
+
+string serializeTimePoint( const time_point& time, const std::string& format)
+{
+    std::time_t tt = std::chrono::system_clock::to_time_t(time);
+    std::tm tm = *std::gmtime(&tt); //GMT (UTC)
+    //std::tm tm = *std::localtime(&tt); //Locale time-zone, usually UTC by default.
+    std::stringstream ss;
+    ss << std::put_time( &tm, format.c_str() );
+    return ss.str();
+}
+
+struct Logger {
+    int test_id;
+    string input_file_name = INPUT_FILE;
+    pair <int, int> seed = make_pair(OPERATION_SEED, QUERY_SEED);
+    int num_queries = -1;
+    int num_insertions = -1;
+    string algorithm; 
+    string start_time;
+    string end_time;
+    int hashed_output = -1;
+    int num_reachable_queries = -1;
+} logg;
 
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
@@ -87,14 +116,14 @@ public:
         ifstream infile(INPUT_FILE);
         
         // random_device os_seed; //can use later for seeding engine.
-        engine generator(2334);
-        engine query_generator(1223);
+        engine generator(OPERATION_SEED);
+        engine query_generator(QUERY_SEED);
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
 
         int u, v;
         clock_t tStart = clock();
-        int queries_answered = 0, true_q = 0;
+        int queries_answered = 0, true_q = 0, num_insertions = 0;
         while (infile >> u >> v){
             while (distribute(generator) < 33){
                 int u_q = query_chance_distribute(query_generator);
@@ -105,6 +134,7 @@ public:
                 results.push_back(result);
             }
             add_edge(u, v);
+            num_insertions++;
         }
 
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
@@ -113,11 +143,17 @@ public:
         infile.close();
         ofstream outfile(OUTPUT_FILE, ios_base::app);
         ostream_iterator<string> output_iterator(outfile, "");
+        int hash_output = hash<vector<bool>>{}(results);
         outfile << hash<vector<bool>>{}(results) << "\n";
         outfile.close();
+        logg.num_queries = queries_answered;
+        logg.num_insertions = num_insertions;
+        logg.hashed_output = hash_output;
+        logg.num_reachable_queries = true_q;
     }
 protected:
     int nodes;
+    int test_numbers;
     vector<vector<int>> out_edge;
     vector<vector<int>> in_edge;
     vector <bool> results;
@@ -310,11 +346,52 @@ private:
     }
 };
 
+int get_test_id(){ //can probably read backwards later to enhance speed
+    string line;
+    ifstream log_file (LOG_FILE);
+    int id = 0;
+    while(getline(log_file, line)) { 
+        if (line.find('*') != string::npos) {
+            id ++;
+        }
+    }
+    return id;
+}
+
+void write_to_log(){
+    ofstream log_file;
+    log_file.open(LOG_FILE, std::ios_base::app);
+    log_file << "test id: " << logg.test_id << '\n' <<
+                "input file name: " << logg.input_file_name << '\n' <<
+                "seed: " << logg.seed.first << ", " << logg.seed.second << '\n' <<
+                "#queries: " << logg.num_queries << '\n' <<
+                "#insertions: " << logg.num_insertions << '\n' <<
+                "algorithm:" << logg.algorithm << '\n' <<
+                "start time: " << logg.start_time << '\n' <<
+                "end time: " << logg.end_time << '\n' <<
+                "hashed output: " << logg.hashed_output << '\n' <<
+                "#reachable queries: " << logg.num_reachable_queries << '\n' <<
+                string(50, '*') << "\n";
+}
 
 int main(int argc, char* argv[]){
-    ofstream outfile(OUTPUT_FILE, ios_base::app);
-    outfile << "The result for " << argv[1] << ": ";
-    outfile.close();
+    // ofstream outfile(OUTPUT_FILE, ios_base::app);
+    // outfile << "The result for " << argv[1] << ": ";
+    // outfile.close(); //should clean up writing log like a chart and then add the test
+    // algorithm --- time --- output --- seed --- total reachabilities...
+
+    // cout << string(101, '-') << "\n";
+    // cout << std::left << std::setw(20) << "|Test Number" << std::setw(20) << "|Algorithm" << std::setw(20) << "|Time"
+    //       << std::setw(20) << "|Output" << std::setw(20) << "|Seed" << "|\n";
+    // cout << string(101, '-') << "\n";
+    if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
+        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
+            cerr << "Wrong Input\n";
+            exit(0);
+    }
+    logg.test_id = get_test_id();
+    logg.start_time = serializeTimePoint(chrono::high_resolution_clock::now(), "UTC: %Y-%m-%d %H:%M:%S:%MS");
+    logg.algorithm = argv[1]; 
     if (!strcmp(argv[1], "dfs")){
         Dfs alg;
         alg.run();
@@ -331,7 +408,6 @@ int main(int argc, char* argv[]){
         Sv alg;
         alg.run();
     }
-    else{
-        cerr << "Wrong input" << endl;
-    }
+    logg.end_time = serializeTimePoint(chrono::high_resolution_clock::now(), "UTC: %Y-%m-%d %H:%M:%S");
+    write_to_log();
 }

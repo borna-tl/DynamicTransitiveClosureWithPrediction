@@ -1,3 +1,4 @@
 main
 output.txt
 valgrind-out.txt
+log.txt
