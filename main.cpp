@@ -17,17 +17,6 @@ using engine = std::mt19937;
 #define OUTPUT_FILE "output.txt"
 #define LOG_FILE "log.txt"
 
-using time_point = std::chrono::system_clock::time_point;
-
-string serializeTimePoint( const time_point& time, const std::string& format)
-{
-    std::time_t tt = std::chrono::system_clock::to_time_t(time);
-    std::tm tm = *std::gmtime(&tt); //GMT (UTC)
-    //std::tm tm = *std::localtime(&tt); //Locale time-zone, usually UTC by default.
-    std::stringstream ss;
-    ss << std::put_time( &tm, format.c_str() );
-    return ss.str();
-}
 
 struct Logger {
     int test_id;
@@ -38,7 +27,7 @@ struct Logger {
     string algorithm; 
     string start_time;
     string end_time;
-    int hashed_output = -1;
+    size_t hashed_output;
     int num_reachable_queries = -1;
 } logg;
 
@@ -143,7 +132,7 @@ public:
         infile.close();
         ofstream outfile(OUTPUT_FILE, ios_base::app);
         ostream_iterator<string> output_iterator(outfile, "");
-        int hash_output = hash<vector<bool>>{}(results);
+        size_t hash_output = hash<vector<bool>>{}(results);
         outfile << hash<vector<bool>>{}(results) << "\n";
         outfile.close();
         logg.num_queries = queries_answered;
@@ -374,6 +363,17 @@ void write_to_log(){
                 string(50, '*') << "\n";
 }
 
+void set_time(string& t){
+    auto timepoint = chrono::system_clock::now();
+    auto coarse = chrono::system_clock::to_time_t(timepoint);
+    auto fine = chrono::time_point_cast<std::chrono::milliseconds>(timepoint);
+
+    char buffer[sizeof "9999-12-31 23:59:59.999"];
+    std::snprintf(buffer + std::strftime(buffer, sizeof buffer - 3, 
+                    "%F %T.", std::localtime(&coarse)), 4, "%03lu",
+                    fine.time_since_epoch().count() % 1000);
+    t = buffer;
+}
 int main(int argc, char* argv[]){
     // ofstream outfile(OUTPUT_FILE, ios_base::app);
     // outfile << "The result for " << argv[1] << ": ";
@@ -384,14 +384,18 @@ int main(int argc, char* argv[]){
     // cout << std::left << std::setw(20) << "|Test Number" << std::setw(20) << "|Algorithm" << std::setw(20) << "|Time"
     //       << std::setw(20) << "|Output" << std::setw(20) << "|Seed" << "|\n";
     // cout << string(101, '-') << "\n";
+
+    //to do: add output generation
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
         strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
             cerr << "Wrong Input\n";
             exit(0);
     }
+
     logg.test_id = get_test_id();
-    logg.start_time = serializeTimePoint(chrono::high_resolution_clock::now(), "UTC: %Y-%m-%d %H:%M:%S:%MS");
+    set_time(logg.start_time);
     logg.algorithm = argv[1]; 
+
     if (!strcmp(argv[1], "dfs")){
         Dfs alg;
         alg.run();
@@ -408,6 +412,7 @@ int main(int argc, char* argv[]){
         Sv alg;
         alg.run();
     }
-    logg.end_time = serializeTimePoint(chrono::high_resolution_clock::now(), "UTC: %Y-%m-%d %H:%M:%S");
+
+    set_time(logg.end_time);
     write_to_log();
 }
