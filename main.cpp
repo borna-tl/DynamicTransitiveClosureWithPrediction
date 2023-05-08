@@ -44,25 +44,6 @@ public:
         update_reachability(u, v, out_edge, r_plus); //source reachability
         update_reachability(v, u, in_edge, r_minus); //sink reachability
     }
-    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool* r){ //read on refrence vs. pointers
-        if (r[v])
-            return;
-        if (!r[u])
-            return;
-        queue<int> q;
-        r[v] = true;
-        q.push(v);
-        while (!q.empty()) {
-            v = q.front();
-            q.pop();
-            for (auto i : edge[v]){
-                if (!r[i]){
-                    r[i] = true;
-                    q.push(i);
-                }
-            }
-        }
-    }
     
     void print_reachability_list(){
         cout << "Reachable Nodes from " << id << ": ";
@@ -88,6 +69,26 @@ private:
     //for u in [MAX_NODES]:
     bool r_plus[MAX_NODES]; // is node u reachable from s? s--->?--->u 
     bool r_minus[MAX_NODES]; // is node s reachable from u? u--->?--->s 
+
+    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool* r){ //read on refrence vs. pointers
+        if (r[v])
+            return;
+        if (!r[u])
+            return;
+        queue<int> q;
+        r[v] = true;
+        q.push(v);
+        while (!q.empty()) {
+            v = q.front();
+            q.pop();
+            for (auto i : edge[v]){
+                if (!r[i]){
+                    r[i] = true;
+                    q.push(i);
+                }
+            }
+        }
+    }
 };
 
 class Algorithms{
@@ -100,8 +101,8 @@ public:
         in_edge.assign(nodes, vector<int>());
         infile.close();
     }
-    virtual bool answer_query(int u, int v) = 0; 
-    void run(){
+    virtual bool answer_query(int32_t u, int32_t v) = 0; 
+    void run(){ //bring outsie and pass algorithm to it
         ifstream infile(INPUT_FILE);
         
         // random_device os_seed; //can use later for seeding engine.
@@ -110,13 +111,13 @@ public:
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
 
-        int u, v;
+        int32_t u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0, num_insertions = 0;
         while (infile >> u >> v){
             while (distribute(generator) < 33){
-                int u_q = query_chance_distribute(query_generator);
-                int v_q = query_chance_distribute(query_generator);
+                int32_t u_q = query_chance_distribute(query_generator);
+                int32_t v_q = query_chance_distribute(query_generator);
                 bool result = answer_query(u_q, v_q);   
                 queries_answered ++;          
                 true_q += (result == true); 
@@ -143,10 +144,10 @@ public:
 protected:
     int nodes;
     int test_numbers;
-    vector<vector<int>> out_edge;
-    vector<vector<int>> in_edge;
+    vector<vector<int32_t>> out_edge;
+    vector<vector<int32_t>> in_edge;
     vector <bool> results;
-    virtual void add_edge(int u, int v){
+    virtual void add_edge(int32_t u, int32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
     }
@@ -180,7 +181,7 @@ public:
         }
         return ans;
     }
-    bool answer_query(int u, int v){
+    bool answer_query(int32_t u, int32_t v){
         return calculate_bfs(u, v);                
     }
 private:
@@ -205,7 +206,7 @@ public:
         }
         return visited_dfs[v];
     }
-    bool answer_query(int u, int v){       
+    bool answer_query(int32_t u, int32_t v){       
         visited_dfs.assign(visited_dfs.size(), false);
         return calculate_dfs(u, v);
     }
@@ -264,7 +265,7 @@ public:
         }
         return found_path;
     }
-    bool answer_query(int u, int v){
+    bool answer_query(int32_t u, int32_t v){
         return calculate_bibfs(u, v);                
     }
 private:
@@ -374,6 +375,7 @@ void set_time(string& t){
                     fine.time_since_epoch().count() % 1000);
     t = buffer;
 }
+
 int main(int argc, char* argv[]){
     // ofstream outfile(OUTPUT_FILE, ios_base::app);
     // outfile << "The result for " << argv[1] << ": ";
@@ -386,6 +388,8 @@ int main(int argc, char* argv[]){
     // cout << string(101, '-') << "\n";
 
     //to do: add output generation
+    //output should be a chart of all the logs for different algorithms
+    //also add an input which runs all the algorithms
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
         strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
             cerr << "Wrong Input\n";
@@ -415,4 +419,6 @@ int main(int argc, char* argv[]){
 
     set_time(logg.end_time);
     write_to_log();
+
+    // write_to_output();
 }
