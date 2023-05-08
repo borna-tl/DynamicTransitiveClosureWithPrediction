@@ -31,6 +31,13 @@ struct Logger {
     int num_reachable_queries = -1;
 } logg;
 
+struct Operation {
+    Operation(bool type_, pair <uint32_t, uint32_t> arguments_) :
+                type(type_), arguments(arguments_){}
+    bool type;
+    pair <uint32_t, uint32_t> arguments;
+};
+
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
     reachabilityTree(){}
@@ -94,43 +101,59 @@ private:
 class Algorithms{
 public:
     Algorithms(){
-        ifstream infile(META_FILE);
-        infile >> nodes;
-        nodes++; //because input file is zero-based
+        read_meta_file();
         out_edge.assign(nodes, vector<int>());
         in_edge.assign(nodes, vector<int>());
-        infile.close();
+        cout << "Nods" << nodes << endl;
     }
     virtual bool answer_query(int32_t u, int32_t v) = 0; 
-    void run(){ //bring outsie and pass algorithm to it
-        ifstream infile(INPUT_FILE);
-        
+    
+    void generate_operations (){
         // random_device os_seed; //can use later for seeding engine.
         engine generator(OPERATION_SEED);
         engine query_generator(QUERY_SEED);
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
-
         int32_t u, v;
-        clock_t tStart = clock();
-        int queries_answered = 0, true_q = 0, num_insertions = 0;
-        while (infile >> u >> v){
+
+        for (auto x : input_file_operations){
+            u = x.first;
+            v = x.second;
             while (distribute(generator) < 33){
                 int32_t u_q = query_chance_distribute(query_generator);
                 int32_t v_q = query_chance_distribute(query_generator);
-                bool result = answer_query(u_q, v_q);   
+                operations.push_back(Operation(true, make_pair(u_q, v_q)));
+            }
+            operations.push_back(Operation(false, make_pair(u, v)));
+        }
+
+    }
+
+    void run(){ //bring outsie and pass algorithm to it
+        read_input_file();
+        generate_operations();
+        int32_t u, v;
+        clock_t tStart = clock();
+        int queries_answered = 0, true_q = 0, num_insertions = 0;
+        for (auto x : operations){
+            u = x.arguments.first;
+            v = x.arguments.second;
+            if (x.type){
+                bool result = answer_query(u, v);   
                 queries_answered ++;          
                 true_q += (result == true); 
                 results.push_back(result);
             }
-            add_edge(u, v);
-            num_insertions++;
+            else{
+                add_edge(u, v);
+                num_insertions++;
+            }
+            
         }
 
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
-        infile.close();
         ofstream outfile(OUTPUT_FILE, ios_base::app);
         ostream_iterator<string> output_iterator(outfile, "");
         size_t hash_output = hash<vector<bool>>{}(results);
@@ -142,14 +165,30 @@ public:
         logg.num_reachable_queries = true_q;
     }
 protected:
-    int nodes;
+    int nodes = 0;
     int test_numbers;
     vector<vector<int32_t>> out_edge;
     vector<vector<int32_t>> in_edge;
+    vector<Operation> operations;
+    vector<pair<uint32_t, uint32_t>> input_file_operations;  
     vector <bool> results;
     virtual void add_edge(int32_t u, int32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
+    }
+    void read_input_file(){
+        ifstream infile(INPUT_FILE);
+        int32_t u, v;
+        while (infile >> u >> v){
+            input_file_operations.push_back(make_pair(u, v));
+        }
+        infile.close();
+    }
+    void read_meta_file(){
+        ifstream infile(META_FILE);
+        infile >> nodes;
+        nodes++; //because input file is zero-based
+        infile.close();
     }
 };
 
@@ -282,7 +321,7 @@ public:
         fallback = new Bibfs();
 
     }
-    bool calculate_sv(int u, int v){  
+    bool calculate_sv(int32_t u, int32_t v){  
         //instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
         if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
@@ -309,27 +348,27 @@ public:
         // return Bibfs(input_file, output_file).calculate_bibfs(u, v);
         return fallback->calculate_bibfs(u, v);
     }
-    bool answer_query (int u, int v){
+    bool answer_query (int32_t u, int32_t v){
         return calculate_sv(u, v);                
     }
 private:
     reachabilityTree* reachability_tree[MAX_NODES];
-    vector <int> sv_list;
+    vector <int32_t> sv_list;
     Bibfs* fallback;
     void generate_sv_list(){
         // vector<int> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
-        vector<int> svs = {0};
+        vector<int32_t> svs = {0};
         for (auto sv : svs){
             reachability_tree[sv] = new reachabilityTree(sv); //using node sv as new SV
             sv_list.push_back(sv);
         }
     }
-    void update_sv(int u, int v){
+    void update_sv(int32_t u, int32_t v){
         for (auto sv : sv_list){
             reachability_tree[sv]->update(u, v, out_edge, in_edge);
         }
     }
-    void add_edge(int u, int v){
+    void add_edge(int32_t u, int32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
         update_sv(u, v);
@@ -377,17 +416,8 @@ void set_time(string& t){
 }
 
 int main(int argc, char* argv[]){
-    // ofstream outfile(OUTPUT_FILE, ios_base::app);
-    // outfile << "The result for " << argv[1] << ": ";
-    // outfile.close(); //should clean up writing log like a chart and then add the test
-    // algorithm --- time --- output --- seed --- total reachabilities...
-
-    // cout << string(101, '-') << "\n";
-    // cout << std::left << std::setw(20) << "|Test Number" << std::setw(20) << "|Algorithm" << std::setw(20) << "|Time"
-    //       << std::setw(20) << "|Output" << std::setw(20) << "|Seed" << "|\n";
-    // cout << string(101, '-') << "\n";
-
-    //to do: add output generation
+ 
+    //to do: add output generation -> in python using log.txt
     //output should be a chart of all the logs for different algorithms
     //also add an input which runs all the algorithms
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
