@@ -12,14 +12,17 @@ using engine = std::mt19937;
 #define OPERATION_SEED 1223
 #define QUERY_SEED 2334
 
+#define QUERY_PERCENTAGE 33
+#define TEST_RUN_COUNT 10
+
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
 #define OUTPUT_FILE "output.txt"
 #define LOG_FILE "log.txt"
 
-vector<pair<uint32_t, uint32_t>> input_file_operations; //should we bringg all this into a new class Program? 
+vector<pair<uint32_t, uint32_t>> input_file_operations; //should we bring all this into a new class Program? 
 int nodes = 0;
-
+int input_num_lines = 0;
 
 
 struct Logger {
@@ -50,6 +53,10 @@ public:
         r_plus[id] = true;
         r_minus[id] = true;
     }
+    // ~reachabilityTree(){
+    //     delete[] r_plus;
+    //     delete[] r_minus;
+    // }
 
     void update(int u, int v, const vector<vector<int>> &out_edge, const vector<vector<int>> &in_edge){
         update_reachability(u, v, out_edge, r_plus); //source reachability
@@ -107,11 +114,10 @@ public:
     Algorithms(){
         out_edge.assign(nodes, vector<int>());
         in_edge.assign(nodes, vector<int>());
-        cout << "Nods" << nodes << endl;
     }
     virtual bool answer_query(int32_t u, int32_t v) = 0; 
 
-    void run(vector<Operation> operations){ //bring outsie and pass algorithm to it
+    void run(const vector<Operation> operations){ //bring outsie and pass algorithm to it
         int32_t u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0, num_insertions = 0;
@@ -145,7 +151,6 @@ public:
         logg.num_reachable_queries = true_q;
     }
 protected:
-    int test_numbers;
     vector<vector<int32_t>> out_edge;
     vector<vector<int32_t>> in_edge;
     vector <bool> results;
@@ -283,7 +288,13 @@ public:
     Sv() : Algorithms(){
         generate_sv_list();
         fallback = new Bibfs();
-        cout << "sv constructor called!" << endl;
+        cout << "consructor called" << endl;
+    }
+    ~Sv(){
+        // for (int i = 0; i < MAX_NODES; i++)
+        //     delete reachability_tree[i];
+        fallback = new Bibfs(); //buggy, results are not the same
+        sv_list.clear();
     }
     bool calculate_sv(int32_t u, int32_t v){  
         //instead of searching, we can use hash map as well.
@@ -357,9 +368,10 @@ void write_to_log(){
     log_file << "test id: " << logg.test_id << '\n' <<
                 "input file name: " << logg.input_file_name << '\n' <<
                 "seed: " << logg.seed.first << ", " << logg.seed.second << '\n' <<
+                "#run: " << TEST_RUN_COUNT << '\n' << 
                 "#queries: " << logg.num_queries << '\n' <<
                 "#insertions: " << logg.num_insertions << '\n' <<
-                "algorithm:" << logg.algorithm << '\n' <<
+                "algorithm: " << logg.algorithm << '\n' <<
                 "start time: " << logg.start_time << '\n' <<
                 "end time: " << logg.end_time << '\n' <<
                 "hashed output: " << logg.hashed_output << '\n' <<
@@ -381,7 +393,9 @@ void set_time(string& t){
 
 void read_meta_file(){
     ifstream infile(META_FILE);
-    infile >> nodes;
+    string command;
+    infile >> command >> nodes;
+    infile >> command >> input_num_lines;
     nodes++; //because input file is zero-based
     infile.close();
 }
@@ -406,7 +420,7 @@ void generate_operations (vector<Operation>& operations){
     for (auto x : input_file_operations){
         u = x.first;
         v = x.second;
-        while (distribute(generator) < 33){
+        while (distribute(generator) < QUERY_PERCENTAGE){
             int32_t u_q = query_chance_distribute(query_generator);
             int32_t v_q = query_chance_distribute(query_generator);
             operations.push_back(Operation(true, make_pair(u_q, v_q)));
@@ -415,14 +429,38 @@ void generate_operations (vector<Operation>& operations){
     }
 }
 
-void execute_test(vector<Operation>& operations){
+void execute_test(const vector<Operation>& operations, string mode){
     clock_t tStart = clock();
-    for (int i = 0; i < 4; i++){
-        Sv* alg = new Sv; //better ways to implement this
-        alg->run(operations);
-        //why if obj (instead of pointer), we get seg fault??
+    Algorithms* alg;
+    if (mode == "dfs"){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            alg = new Dfs(); //better ways to implement this
+            alg->run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
     }
-    printf("\n\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
+    else if (mode == "bfs"){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            alg = new Bfs(); //better ways to implement this
+            alg->run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    else if (mode == "bibfs"){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            alg = new Bibfs(); //better ways to implement this
+            alg->run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    else if (mode == "sv"){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            Sv algg; //better ways to implement this
+            algg.run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    printf("\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
 }
 
 
@@ -431,41 +469,25 @@ int main(int argc, char* argv[]){
     //to do: add output generation -> in python using log.txt
     //output should be a chart of all the logs for different algorithms
     //also add an input which runs all the algorithms
+
+
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
-        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv") && strcmp(argv[1], "svtimes")){
+        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
             cerr << "Wrong Input\n";
             exit(0);
     }
     
     read_meta_file();
     vector<Operation> operations;
-    // operations.resize(nodes); //can actually resize to input file size
-    read_input_file();
-    generate_operations(operations);
+    operations.reserve(input_num_lines * ((100 + QUERY_PERCENTAGE) / 100));
+    read_input_file(); //read and store input file in "input_file_operations"
+    generate_operations(operations); //add query operatios to "input_file_operations" and store result in "operations"
 
     logg.test_id = get_test_id();
     set_time(logg.start_time);
     logg.algorithm = argv[1]; 
 
-    if (!strcmp(argv[1], "dfs")){
-        Dfs alg;
-        alg.run(operations);
-    }
-    else if (!strcmp(argv[1], "bfs")){
-        Bfs alg;
-        alg.run(operations);
-    }
-    else if (!strcmp(argv[1], "bibfs")){
-        Bibfs alg;
-        alg.run(operations);
-    }
-    else if (!strcmp(argv[1], "sv")){
-        Sv alg;
-        alg.run(operations);
-    }
-    else if (!strcmp(argv[1], "svtimes")){
-        execute_test(operations);
-    }
+    execute_test(operations, argv[1]);
 
     set_time(logg.end_time);
     write_to_log();
