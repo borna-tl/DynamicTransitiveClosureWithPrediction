@@ -17,6 +17,10 @@ using engine = std::mt19937;
 #define OUTPUT_FILE "output.txt"
 #define LOG_FILE "log.txt"
 
+vector<pair<uint32_t, uint32_t>> input_file_operations; //should we bringg all this into a new class Program? 
+int nodes = 0;
+
+
 
 struct Logger {
     int test_id;
@@ -101,37 +105,13 @@ private:
 class Algorithms{
 public:
     Algorithms(){
-        read_meta_file();
         out_edge.assign(nodes, vector<int>());
         in_edge.assign(nodes, vector<int>());
         cout << "Nods" << nodes << endl;
     }
     virtual bool answer_query(int32_t u, int32_t v) = 0; 
-    
-    void generate_operations (){
-        // random_device os_seed; //can use later for seeding engine.
-        engine generator(OPERATION_SEED);
-        engine query_generator(QUERY_SEED);
-        uniform_int_distribution< u32 > distribute(0, 99);
-        uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
-        int32_t u, v;
 
-        for (auto x : input_file_operations){
-            u = x.first;
-            v = x.second;
-            while (distribute(generator) < 33){
-                int32_t u_q = query_chance_distribute(query_generator);
-                int32_t v_q = query_chance_distribute(query_generator);
-                operations.push_back(Operation(true, make_pair(u_q, v_q)));
-            }
-            operations.push_back(Operation(false, make_pair(u, v)));
-        }
-
-    }
-
-    void run(){ //bring outsie and pass algorithm to it
-        read_input_file();
-        generate_operations();
+    void run(vector<Operation> operations){ //bring outsie and pass algorithm to it
         int32_t u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0, num_insertions = 0;
@@ -165,31 +145,15 @@ public:
         logg.num_reachable_queries = true_q;
     }
 protected:
-    int nodes = 0;
     int test_numbers;
     vector<vector<int32_t>> out_edge;
     vector<vector<int32_t>> in_edge;
-    vector<Operation> operations;
-    vector<pair<uint32_t, uint32_t>> input_file_operations;  
     vector <bool> results;
     virtual void add_edge(int32_t u, int32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
     }
-    void read_input_file(){
-        ifstream infile(INPUT_FILE);
-        int32_t u, v;
-        while (infile >> u >> v){
-            input_file_operations.push_back(make_pair(u, v));
-        }
-        infile.close();
-    }
-    void read_meta_file(){
-        ifstream infile(META_FILE);
-        infile >> nodes;
-        nodes++; //because input file is zero-based
-        infile.close();
-    }
+    
 };
 
 
@@ -319,7 +283,7 @@ public:
     Sv() : Algorithms(){
         generate_sv_list();
         fallback = new Bibfs();
-
+        cout << "sv constructor called!" << endl;
     }
     bool calculate_sv(int32_t u, int32_t v){  
         //instead of searching, we can use hash map as well.
@@ -415,16 +379,69 @@ void set_time(string& t){
     t = buffer;
 }
 
+void read_meta_file(){
+    ifstream infile(META_FILE);
+    infile >> nodes;
+    nodes++; //because input file is zero-based
+    infile.close();
+}
+
+void read_input_file(){
+    ifstream infile(INPUT_FILE);
+    int32_t u, v;
+    while (infile >> u >> v){
+        input_file_operations.push_back(make_pair(u, v));
+    }
+    infile.close();
+}
+
+void generate_operations (vector<Operation>& operations){
+    // random_device os_seed; //can use later for seeding engine.
+    engine generator(OPERATION_SEED);
+    engine query_generator(QUERY_SEED);
+    uniform_int_distribution< u32 > distribute(0, 99);
+    uniform_int_distribution< u32 > query_chance_distribute(0, nodes-1);
+    int32_t u, v;
+
+    for (auto x : input_file_operations){
+        u = x.first;
+        v = x.second;
+        while (distribute(generator) < 33){
+            int32_t u_q = query_chance_distribute(query_generator);
+            int32_t v_q = query_chance_distribute(query_generator);
+            operations.push_back(Operation(true, make_pair(u_q, v_q)));
+        }
+        operations.push_back(Operation(false, make_pair(u, v)));
+    }
+}
+
+void execute_test(vector<Operation>& operations){
+    clock_t tStart = clock();
+    for (int i = 0; i < 4; i++){
+        Sv* alg = new Sv; //better ways to implement this
+        alg->run(operations);
+        //why if obj (instead of pointer), we get seg fault??
+    }
+    printf("\n\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
+}
+
+
 int main(int argc, char* argv[]){
  
     //to do: add output generation -> in python using log.txt
     //output should be a chart of all the logs for different algorithms
     //also add an input which runs all the algorithms
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
-        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
+        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv") && strcmp(argv[1], "svtimes")){
             cerr << "Wrong Input\n";
             exit(0);
     }
+    
+    read_meta_file();
+    vector<Operation> operations;
+    // operations.resize(nodes); //can actually resize to input file size
+    read_input_file();
+    generate_operations(operations);
 
     logg.test_id = get_test_id();
     set_time(logg.start_time);
@@ -432,19 +449,22 @@ int main(int argc, char* argv[]){
 
     if (!strcmp(argv[1], "dfs")){
         Dfs alg;
-        alg.run();
+        alg.run(operations);
     }
     else if (!strcmp(argv[1], "bfs")){
         Bfs alg;
-        alg.run();
+        alg.run(operations);
     }
     else if (!strcmp(argv[1], "bibfs")){
         Bibfs alg;
-        alg.run();
+        alg.run(operations);
     }
     else if (!strcmp(argv[1], "sv")){
         Sv alg;
-        alg.run();
+        alg.run(operations);
+    }
+    else if (!strcmp(argv[1], "svtimes")){
+        execute_test(operations);
     }
 
     set_time(logg.end_time);
