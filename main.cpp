@@ -25,17 +25,16 @@ vector<pair<uint32_t, uint32_t>> input_file_operations; //should we bring all th
 int nodes = 0;
 int input_num_lines = 0;
 
-#define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
-#define PBWIDTH 60
+#define PBSTR "++++++++++++++++++++++++++++++++++++++++++++++++++"
+#define PBWIDTH 50
 
-void printProgress(double percentage) {
+void print_progress(double percentage) {
     int val = (int) (percentage * 100);
     int lpad = (int) (percentage * PBWIDTH);
     int rpad = PBWIDTH - lpad;
     printf("\r%3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
     fflush(stdout);
 }
-
 
 
 struct Logger {
@@ -147,7 +146,7 @@ public:
             c_out++;
             if (c_out > PROGRESS_STAMP * operations.size() / 100){
                 c_out = 0;
-                printProgress((double)(queries_answered+num_insertions)/operations.size());
+                print_progress((double)(queries_answered+num_insertions)/operations.size());
             }
         }
         cout << endl;
@@ -333,9 +332,10 @@ public:
         return calculate_sv(u, v);                
     }
 private:
+    //further tests needed on smart pointers
+    //right now both cases are competetive
     unique_ptr<reachabilityTree> reachability_tree[MAX_NODES];
     vector <int32_t> sv_list;
-    // Bibfs fallback;
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
