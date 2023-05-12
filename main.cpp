@@ -13,7 +13,7 @@ using engine = std::mt19937;
 #define QUERY_SEED 2334
 
 #define QUERY_PERCENTAGE 33
-#define TEST_RUN_COUNT 2
+#define TEST_RUN_COUNT 10
 #define PROGRESS_STAMP 1 //define the progress bar count
 
 #define INPUT_FILE "sample.txt"
@@ -308,22 +308,22 @@ public:
         //instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
         if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
-            return reachability_tree.find(u)->second->reaches(v);
+            return reachability_tree[u]->reaches(v);
         }
         if (find(sv_list.begin(), sv_list.end(), v) != sv_list.end()){
-            return reachability_tree.find(v)->second->is_reachable_from(u);
+            return reachability_tree[v]->is_reachable_from(u);
         }
         for (auto sv: sv_list){
             //obs. 1
-            if (reachability_tree.find(sv)->second->is_reachable_from(u) && reachability_tree.find(sv)->second->reaches(v)){
+            if (reachability_tree[sv]->is_reachable_from(u) && reachability_tree[sv]->reaches(v)){
                 return true;
             }
             //obs. 2
-            if (reachability_tree.find(sv)->second->reaches(u) && !reachability_tree.find(sv)->second->reaches(v)){
+            if (reachability_tree[sv]->reaches(u) && !reachability_tree[sv]->reaches(v)){
                 return false;
             }
             //obs. 3
-            if (reachability_tree.find(sv)->second->is_reachable_from(v) && !reachability_tree.find(sv)->second->is_reachable_from(u)){
+            if (reachability_tree[sv]->is_reachable_from(v) && !reachability_tree[sv]->is_reachable_from(u)){
                 return false;
             }
         }
@@ -333,7 +333,7 @@ public:
         return calculate_sv(u, v);                
     }
 private:
-    unordered_map<uint32_t, unique_ptr<reachabilityTree>> reachability_tree;
+    unique_ptr<reachabilityTree> reachability_tree[MAX_NODES];
     vector <int32_t> sv_list;
     // Bibfs fallback;
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
@@ -345,13 +345,13 @@ private:
         sv_list.clear();
         vector<int32_t> svs = {0};
         for (auto sv : svs){
-            reachability_tree.insert(make_pair(sv, unique_ptr<reachabilityTree>(new reachabilityTree(sv))));
+            reachability_tree[sv] = unique_ptr<reachabilityTree>(new reachabilityTree(sv));
             sv_list.push_back(sv);
         }
     }
     void update_sv(int32_t u, int32_t v){
         for (auto sv : sv_list){
-            reachability_tree.find(sv)->second->update(u, v, out_edge, in_edge);
+            reachability_tree[sv]->update(u, v, out_edge, in_edge);
         }
     }
     void add_edge(int32_t u, int32_t v){
