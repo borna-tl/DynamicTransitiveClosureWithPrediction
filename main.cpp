@@ -12,8 +12,9 @@ using engine = std::mt19937;
 #define OPERATION_SEED 1223
 #define QUERY_SEED 2334
 
-#define QUERY_PERCENTAGE 33
-#define TEST_RUN_COUNT 10
+#define QUERY_PERCENTAGE 1
+#define TEST_RUN_COUNT 1
+#define PROGRESS_STAMP 1 //define the progress bar count
 
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
@@ -23,6 +24,18 @@ using engine = std::mt19937;
 vector<pair<uint32_t, uint32_t>> input_file_operations; //should we bring all this into a new class Program? 
 int nodes = 0;
 int input_num_lines = 0;
+
+#define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
+#define PBWIDTH 60
+
+void printProgress(double percentage) {
+    int val = (int) (percentage * 100);
+    int lpad = (int) (percentage * PBWIDTH);
+    int rpad = PBWIDTH - lpad;
+    printf("\r%3d%% [%.*s%*s]", val, lpad, PBSTR, rpad, "");
+    fflush(stdout);
+}
+
 
 
 struct Logger {
@@ -53,10 +66,12 @@ public:
         r_plus[id] = true;
         r_minus[id] = true;
     }
-    // ~reachabilityTree(){
-    //     delete[] r_plus;
-    //     delete[] r_minus;
-    // }
+    ~reachabilityTree(){
+        for (int i = 0; i < MAX_NODES; i++){
+            r_plus[i] = false;
+            r_minus[i]= false;
+        }
+    }
 
     void update(int u, int v, const vector<vector<int>> &out_edge, const vector<vector<int>> &in_edge){
         update_reachability(u, v, out_edge, r_plus); //source reachability
@@ -121,6 +136,7 @@ public:
         int32_t u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0, num_insertions = 0;
+        size_t c_out = 0;
         for (auto x : operations){
             u = x.arguments.first;
             v = x.arguments.second;
@@ -134,9 +150,13 @@ public:
                 add_edge(u, v);
                 num_insertions++;
             }
-            
+            c_out++;
+            if (c_out > PROGRESS_STAMP * operations.size() / 100){
+                c_out = 0;
+                printProgress((double)(queries_answered+num_insertions)/operations.size());
+            }
         }
-
+        cout << endl;
         printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         cout << "Queries answered: " << queries_answered << endl;
         cout << "Reachable queries: " << true_q << endl;
@@ -229,7 +249,16 @@ public:
         visited_bibfs_source.resize(nodes, false);
         visited_bibfs_sink.resize(nodes, false);
     }
-    virtual bool calculate_bibfs(int u, int v){  
+    // void clean(){
+
+    // }
+    bool answer_query(int32_t u, int32_t v){
+        return calculate_bibfs(u, v);                
+    }
+private:
+    vector<bool> visited_bibfs_source;
+    vector<bool> visited_bibfs_sink;
+    bool calculate_bibfs(int u, int v){  
         bool found_path = false;
         vector<int> source_queue, sink_queue;
         size_t source_pointer = 0;
@@ -273,13 +302,6 @@ public:
         }
         return found_path;
     }
-    bool answer_query(int32_t u, int32_t v){
-        return calculate_bibfs(u, v);                
-    }
-private:
-    vector<bool> visited_bibfs_source;
-    vector<bool> visited_bibfs_sink;
-
 };
 
 class Sv : public Algorithms{
@@ -287,14 +309,20 @@ class Sv : public Algorithms{
 public:
     Sv() : Algorithms(){
         generate_sv_list();
-        fallback = new Bibfs();
-        cout << "consructor called" << endl;
+        visited_bibfs_source.resize(nodes, false);
+        visited_bibfs_sink.resize(nodes, false);
+        // fallback
+        // fallback = new Bibfs();
+        
     }
     ~Sv(){
         // for (int i = 0; i < MAX_NODES; i++)
-        //     delete reachability_tree[i];
-        fallback = new Bibfs(); //buggy, results are not the same
+        // reachability_tree[0]->print_reachability_list();
+        delete reachability_tree[0];
+        // fallback = new Bibfs(); //buggy, results are not the same
         sv_list.clear();
+        // delete fallback;
+
     }
     bool calculate_sv(int32_t u, int32_t v){  
         //instead of searching, we can use hash map as well.
@@ -319,9 +347,7 @@ public:
                 return false;
             }
         }
-        //fallback to bfs
-        // return Bibfs(input_file, output_file).calculate_bibfs(u, v);
-        return fallback->calculate_bibfs(u, v);
+        return calculate_bibfs(u, v);
     }
     bool answer_query (int32_t u, int32_t v){
         return calculate_sv(u, v);                
@@ -329,7 +355,11 @@ public:
 private:
     reachabilityTree* reachability_tree[MAX_NODES];
     vector <int32_t> sv_list;
-    Bibfs* fallback;
+    // Bibfs fallback;
+    //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
+    vector<bool> visited_bibfs_source;
+    vector<bool> visited_bibfs_sink;
+
     void generate_sv_list(){
         // vector<int> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
         vector<int32_t> svs = {0};
@@ -347,6 +377,50 @@ private:
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
         update_sv(u, v);
+    }
+    bool calculate_bibfs(int32_t u, int32_t v){  
+        bool found_path = false;
+        vector<int> source_queue, sink_queue;
+        size_t source_pointer = 0;
+        size_t sink_pointer = 0;
+        visited_bibfs_source[u] = true;
+        visited_bibfs_sink[v] = true;
+        source_queue.push_back(u);
+        sink_queue.push_back(v);
+        while (!found_path && source_pointer < source_queue.size()
+                            && sink_pointer < sink_queue.size()) {
+            //running bfs for the source queue one time
+            u = source_queue[source_pointer];
+            source_pointer++;
+            for (auto i : out_edge[u]){
+                if (!visited_bibfs_source[i]){
+                    visited_bibfs_source[i] = true;
+                    source_queue.push_back(i);
+                }
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
+                    found_path = true;
+                }
+            }
+            //running bfs for the back queue one time
+            v = sink_queue[sink_pointer];
+            sink_pointer++;
+            for (auto i : in_edge[v]){
+                if (!visited_bibfs_sink[i]){
+                    visited_bibfs_sink[i] = true;
+                    sink_queue.push_back(i);
+                }
+                if (visited_bibfs_source[i] && visited_bibfs_sink[i]){
+                    found_path = true;
+                }
+            }
+        }
+        for (int i : source_queue){
+            visited_bibfs_source[i] = false;
+        }
+        for (int i : sink_queue){
+            visited_bibfs_sink[i] = false;
+        }
+        return found_path;
     }
 };
 
@@ -487,7 +561,38 @@ int main(int argc, char* argv[]){
     set_time(logg.start_time);
     logg.algorithm = argv[1]; 
 
-    execute_test(operations, argv[1]);
+    // execute_test(operations, argv[1]);
+clock_t tStart = clock();
+    
+    if (!(strcmp(argv[1], "dfs"))){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            Dfs alg; //better ways to implement this
+            alg.run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    else if (!(strcmp(argv[1], "bfs"))){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            Bfs alg; //better ways to implement this
+            alg.run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    else if (!(strcmp(argv[1], "bibfs"))){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            Bibfs alg; //better ways to implement this
+            alg.run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    else if (!(strcmp(argv[1], "sv"))){
+        for (int i = 0; i < TEST_RUN_COUNT; i++){
+            Sv algg; //better ways to implement this
+            algg.run(operations);
+            //why do we get segmentation fault for obj (instead of pointer)?
+        }
+    }
+    printf("\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
 
     set_time(logg.end_time);
     write_to_log();
