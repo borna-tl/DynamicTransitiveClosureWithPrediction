@@ -12,8 +12,8 @@ using engine = std::mt19937;
 #define OPERATION_SEED 1223
 #define QUERY_SEED 2334
 
-#define QUERY_PERCENTAGE 1
-#define TEST_RUN_COUNT 1
+#define QUERY_PERCENTAGE 33
+#define TEST_RUN_COUNT 10
 #define PROGRESS_STAMP 1 //define the progress bar count
 
 #define INPUT_FILE "sample.txt"
@@ -61,54 +61,48 @@ struct Operation {
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
     reachabilityTree(){}
-    reachabilityTree(int id_):id(id_){
-        //should run bfs to initialize: do we consider the initialization in the timing as well?
+    reachabilityTree(int32_t id_):id(id_){
         r_plus[id] = true;
         r_minus[id] = true;
     }
-    ~reachabilityTree(){
-        for (int i = 0; i < MAX_NODES; i++){
-            r_plus[i] = false;
-            r_minus[i]= false;
-        }
-    }
+    ~reachabilityTree(){}
 
-    void update(int u, int v, const vector<vector<int>> &out_edge, const vector<vector<int>> &in_edge){
+    void update(int32_t u, int32_t v, const vector<vector<int32_t>> &out_edge, const vector<vector<int32_t>> &in_edge){
         update_reachability(u, v, out_edge, r_plus); //source reachability
         update_reachability(v, u, in_edge, r_minus); //sink reachability
     }
     
     void print_reachability_list(){
         cout << "Reachable Nodes from " << id << ": ";
-        for (int i = 0; i < MAX_NODES; i++)
+        for (int32_t i = 0; i < MAX_NODES; i++)
             if (r_plus[i])
                 cout << i << " ";
         cout << endl;
         cout << "Reachable Nodes to " << id << ": ";
-        for (int i = 0; i < MAX_NODES; i++)
+        for (int32_t i = 0; i < MAX_NODES; i++)
             if (r_minus[i])
                 cout << i << " ";
         cout << endl;
     }
-    bool reaches(int u){
+    bool reaches(int32_t u){
         return r_plus[u];
     }
-    bool is_reachable_from(int u){
+    bool is_reachable_from(int32_t u){
         return r_minus[u];
     }
+    int id; //change back to private later
 private:
-    int id;
 
     //for u in [MAX_NODES]:
-    bool r_plus[MAX_NODES]; // is node u reachable from s? s--->?--->u 
-    bool r_minus[MAX_NODES]; // is node s reachable from u? u--->?--->s 
+    bool r_plus[MAX_NODES] = {0}; // is node u reachable from s? s--->?--->u 
+    bool r_minus[MAX_NODES] = {0}; // is node s reachable from u? u--->?--->s 
 
-    void update_reachability(int u, int v, const vector<vector<int>> &edge, bool* r){ //read on refrence vs. pointers
+    void update_reachability(int32_t u, int32_t v, const vector<vector<int32_t>> &edge, bool* r){ //read on refrence vs. pointers
         if (r[v])
             return;
         if (!r[u])
             return;
-        queue<int> q;
+        queue<int32_t> q;
         r[v] = true;
         q.push(v);
         while (!q.empty()) {
@@ -127,12 +121,13 @@ private:
 class Algorithms{
 public:
     Algorithms(){
-        out_edge.assign(nodes, vector<int>());
-        in_edge.assign(nodes, vector<int>());
+        out_edge.assign(nodes, vector<int32_t>());
+        in_edge.assign(nodes, vector<int32_t>());
     }
+    virtual ~Algorithms(){};
     virtual bool answer_query(int32_t u, int32_t v) = 0; 
 
-    void run(const vector<Operation> operations){ //bring outsie and pass algorithm to it
+    void run(const vector<Operation> operations){
         int32_t u, v;
         clock_t tStart = clock();
         int queries_answered = 0, true_q = 0, num_insertions = 0;
@@ -188,15 +183,15 @@ public:
     Bfs() : Algorithms(){
         visited_bfs.resize(nodes, false);
     }
-    bool calculate_bfs(int u, int v){  
-        vector<int> q;
+    bool calculate_bfs(int32_t u, int32_t v){  
+        vector<int32_t> q;
         size_t pointer = 0;
         visited_bfs[u] = true;
         q.push_back(u); 
         while (pointer < q.size()) {
             u = q[pointer];
             pointer++;
-            for (int i : out_edge[u]){
+            for (int32_t i : out_edge[u]){
                 if (!visited_bfs[i]){
                     visited_bfs[i] = true;
                     q.push_back(i);
@@ -204,7 +199,7 @@ public:
             }
         }
         bool ans = visited_bfs[v];
-        for (int i : q){
+        for (int32_t i : q){
             visited_bfs[i] = false;
         }
         return ans;
@@ -222,7 +217,7 @@ public:
     Dfs() : Algorithms(){
         visited_dfs.resize(nodes, false);
     }
-    bool calculate_dfs(int u, int v){ 
+    bool calculate_dfs(int32_t u, int32_t v){ 
         visited_dfs[u] = true;
         if (visited_dfs[v]){
             return true;
@@ -249,18 +244,15 @@ public:
         visited_bibfs_source.resize(nodes, false);
         visited_bibfs_sink.resize(nodes, false);
     }
-    // void clean(){
-
-    // }
     bool answer_query(int32_t u, int32_t v){
         return calculate_bibfs(u, v);                
     }
 private:
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
-    bool calculate_bibfs(int u, int v){  
+    bool calculate_bibfs(int32_t u, int32_t v){  
         bool found_path = false;
-        vector<int> source_queue, sink_queue;
+        vector<int32_t> source_queue, sink_queue;
         size_t source_pointer = 0;
         size_t sink_pointer = 0;
         visited_bibfs_source[u] = true;
@@ -294,10 +286,10 @@ private:
                 }
             }
         }
-        for (int i : source_queue){
+        for (int32_t i : source_queue){
             visited_bibfs_source[i] = false;
         }
-        for (int i : sink_queue){
+        for (int32_t i : sink_queue){
             visited_bibfs_sink[i] = false;
         }
         return found_path;
@@ -308,20 +300,18 @@ class Sv : public Algorithms{
 
 public:
     Sv() : Algorithms(){
-        generate_sv_list();
         visited_bibfs_source.resize(nodes, false);
         visited_bibfs_sink.resize(nodes, false);
-        // fallback
-        // fallback = new Bibfs();
-        
+        for (int i = 0; i < MAX_NODES; i++)
+            reachability_tree[i] = NULL;
+              
+        generate_sv_list();
     }
-    ~Sv(){
-        // for (int i = 0; i < MAX_NODES; i++)
-        // reachability_tree[0]->print_reachability_list();
-        delete reachability_tree[0];
-        // fallback = new Bibfs(); //buggy, results are not the same
+    virtual ~Sv(){
+        for (auto sv : sv_list){
+            delete reachability_tree[sv];
+        }
         sv_list.clear();
-        // delete fallback;
 
     }
     bool calculate_sv(int32_t u, int32_t v){  
@@ -361,7 +351,8 @@ private:
     vector<bool> visited_bibfs_sink;
 
     void generate_sv_list(){
-        // vector<int> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
+        // vector<int32_t> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
+        sv_list.clear();
         vector<int32_t> svs = {0};
         for (auto sv : svs){
             reachability_tree[sv] = new reachabilityTree(sv); //using node sv as new SV
@@ -380,7 +371,7 @@ private:
     }
     bool calculate_bibfs(int32_t u, int32_t v){  
         bool found_path = false;
-        vector<int> source_queue, sink_queue;
+        vector<int32_t> source_queue, sink_queue;
         size_t source_pointer = 0;
         size_t sink_pointer = 0;
         visited_bibfs_source[u] = true;
@@ -414,10 +405,10 @@ private:
                 }
             }
         }
-        for (int i : source_queue){
+        for (int32_t i : source_queue){
             visited_bibfs_source[i] = false;
         }
-        for (int i : sink_queue){
+        for (int32_t i : sink_queue){
             visited_bibfs_sink[i] = false;
         }
         return found_path;
@@ -505,33 +496,28 @@ void generate_operations (vector<Operation>& operations){
 
 void execute_test(const vector<Operation>& operations, string mode){
     clock_t tStart = clock();
-    Algorithms* alg;
     if (mode == "dfs"){
         for (int i = 0; i < TEST_RUN_COUNT; i++){
-            alg = new Dfs(); //better ways to implement this
-            alg->run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
+            Dfs alg;
+            alg.run(operations);
         }
     }
     else if (mode == "bfs"){
         for (int i = 0; i < TEST_RUN_COUNT; i++){
-            alg = new Bfs(); //better ways to implement this
-            alg->run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
+            Bfs alg; 
+            alg.run(operations);
         }
     }
     else if (mode == "bibfs"){
         for (int i = 0; i < TEST_RUN_COUNT; i++){
-            alg = new Bibfs(); //better ways to implement this
-            alg->run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
+            Bibfs alg; 
+            alg.run(operations);
         }
     }
     else if (mode == "sv"){
-        for (int i = 0; i < TEST_RUN_COUNT; i++){
-            Sv algg; //better ways to implement this
+        for (int i = 0; i < TEST_RUN_COUNT; i++){            
+            Sv algg;
             algg.run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
         }
     }
     printf("\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
@@ -542,8 +528,6 @@ int main(int argc, char* argv[]){
  
     //to do: add output generation -> in python using log.txt
     //output should be a chart of all the logs for different algorithms
-    //also add an input which runs all the algorithms
-
 
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
         strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
@@ -561,39 +545,8 @@ int main(int argc, char* argv[]){
     set_time(logg.start_time);
     logg.algorithm = argv[1]; 
 
-    // execute_test(operations, argv[1]);
-clock_t tStart = clock();
+    execute_test(operations, argv[1]);
     
-    if (!(strcmp(argv[1], "dfs"))){
-        for (int i = 0; i < TEST_RUN_COUNT; i++){
-            Dfs alg; //better ways to implement this
-            alg.run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
-        }
-    }
-    else if (!(strcmp(argv[1], "bfs"))){
-        for (int i = 0; i < TEST_RUN_COUNT; i++){
-            Bfs alg; //better ways to implement this
-            alg.run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
-        }
-    }
-    else if (!(strcmp(argv[1], "bibfs"))){
-        for (int i = 0; i < TEST_RUN_COUNT; i++){
-            Bibfs alg; //better ways to implement this
-            alg.run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
-        }
-    }
-    else if (!(strcmp(argv[1], "sv"))){
-        for (int i = 0; i < TEST_RUN_COUNT; i++){
-            Sv algg; //better ways to implement this
-            algg.run(operations);
-            //why do we get segmentation fault for obj (instead of pointer)?
-        }
-    }
-    printf("\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
-
     set_time(logg.end_time);
     write_to_log();
 
