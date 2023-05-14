@@ -14,7 +14,8 @@ using engine = std::mt19937;
 
 #define QUERY_PERCENTAGE 33
 #define TEST_RUN_COUNT 10
-#define PROGRESS_STAMP 1 //define the progress bar count
+#define PROGRESS_STAMP 10 //define the progress bar count
+#define TIMEOUT_SEC 1800
 
 #define INPUT_FILE "sample.txt"
 #define META_FILE "meta-sample.txt"
@@ -46,6 +47,7 @@ struct Logger {
     string algorithm; 
     string start_time;
     string end_time;
+    int64_t duration; //in mili-seconds
     size_t hashed_output;
     int num_reachable_queries = -1;
 } logg;
@@ -146,13 +148,17 @@ public:
             c_out++;
             if (c_out > PROGRESS_STAMP * operations.size() / 100){
                 c_out = 0;
-                print_progress((double)(queries_answered+num_insertions)/operations.size());
+                if ((double)(clock() - tStart)/CLOCKS_PER_SEC > TIMEOUT_SEC){
+                    cerr << "Timeout!" << endl;
+                    exit(0);
+                }
+                // print_progress((double)(queries_answered+num_insertions)/operations.size());
             }
         }
-        cout << endl;
-        printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
-        cout << "Queries answered: " << queries_answered << endl;
-        cout << "Reachable queries: " << true_q << endl;
+        // cout << endl;
+        // printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
+        // cout << "Queries answered: " << queries_answered << endl;
+        // cout << "Reachable queries: " << true_q << endl;
         ofstream outfile(OUTPUT_FILE, ios_base::app);
         ostream_iterator<string> output_iterator(outfile, "");
         size_t hash_output = hash<vector<bool>>{}(results);
@@ -302,7 +308,11 @@ public:
         visited_bibfs_sink.resize(nodes, false);   
         generate_sv_list();
     }
-    virtual ~Sv(){}
+    virtual ~Sv(){
+        for (auto sv : sv_list){
+            delete reachability_tree[sv];
+        }
+    }
     bool calculate_sv(int32_t u, int32_t v){  
         //instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
@@ -332,9 +342,8 @@ public:
         return calculate_sv(u, v);                
     }
 private:
-    //further tests needed on smart pointers
-    //right now both cases are competetive
-    unique_ptr<reachabilityTree> reachability_tree[MAX_NODES];
+    //decided to use normal pointers, can use smart pointers later 
+    reachabilityTree* reachability_tree[MAX_NODES];
     vector <int32_t> sv_list;
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
     vector<bool> visited_bibfs_source;
@@ -343,9 +352,9 @@ private:
     void generate_sv_list(){
         // vector<int32_t> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
         sv_list.clear();
-        vector<int32_t> svs = {0};
+        vector<int32_t> svs = {29};
         for (auto sv : svs){
-            reachability_tree[sv] = unique_ptr<reachabilityTree>(new reachabilityTree(sv));
+            reachability_tree[sv] = new reachabilityTree(sv);
             sv_list.push_back(sv);
         }
     }
@@ -429,6 +438,7 @@ void write_to_log(){
                 "algorithm: " << logg.algorithm << '\n' <<
                 "start time: " << logg.start_time << '\n' <<
                 "end time: " << logg.end_time << '\n' <<
+                "duration: " << logg.duration << '\n' <<
                 "hashed output: " << logg.hashed_output << '\n' <<
                 "#reachable queries: " << logg.num_reachable_queries << '\n' <<
                 string(50, '*') << "\n";
@@ -485,32 +495,43 @@ void generate_operations (vector<Operation>& operations){
 }
 
 void execute_test(const vector<Operation>& operations, string mode){
-    clock_t tStart = clock();
     if (mode == "dfs"){
+        auto started = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < TEST_RUN_COUNT; i++){
             Dfs alg;
             alg.run(operations);
         }
+        logg.duration = chrono::duration_cast<std::chrono::milliseconds>
+                        (chrono::high_resolution_clock::now()-started).count();
     }
     else if (mode == "bfs"){
+        auto started = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < TEST_RUN_COUNT; i++){
             Bfs alg; 
             alg.run(operations);
         }
+        logg.duration = chrono::duration_cast<std::chrono::milliseconds>
+                        (chrono::high_resolution_clock::now()-started).count();
     }
     else if (mode == "bibfs"){
+        auto started = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < TEST_RUN_COUNT; i++){
             Bibfs alg; 
             alg.run(operations);
         }
+        logg.duration = chrono::duration_cast<std::chrono::milliseconds>
+                        (chrono::high_resolution_clock::now()-started).count();
     }
     else if (mode == "sv"){
+        auto started = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < TEST_RUN_COUNT; i++){            
             Sv algg;
             algg.run(operations);
         }
+        logg.duration = chrono::duration_cast<std::chrono::milliseconds>
+                        (chrono::high_resolution_clock::now()-started).count();
     }
-    printf("\nTotal Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
+    // cout << "Total Time taken: " << logg.duration << endl;
 }
 
 
@@ -532,8 +553,8 @@ int main(int argc, char* argv[]){
     generate_operations(operations); //add query operatios to "input_file_operations" and store result in "operations"
 
     logg.test_id = get_test_id();
-    set_time(logg.start_time);
     logg.algorithm = argv[1]; 
+    set_time(logg.start_time);
 
     execute_test(operations, argv[1]);
     
