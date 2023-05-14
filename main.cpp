@@ -303,9 +303,9 @@ private:
 class Sv : public Algorithms{
 
 public:
-    Sv() : Algorithms(){
+    Sv(int count_) : Algorithms(), count(count_){
         visited_bibfs_source.resize(nodes, false);
-        visited_bibfs_sink.resize(nodes, false);   
+        visited_bibfs_sink.resize(nodes, false);
         generate_sv_list();
     }
     virtual ~Sv(){
@@ -348,15 +348,29 @@ private:
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
+    int count;
 
     void generate_sv_list(){
-        // vector<int32_t> svs = {0,2,8,16,64,256,2048,8192,32768,65536};
+        vector<int32_t> svs = {0,2,8,9,10,12,16,17,19,29}; //from katherin's work
         sv_list.clear();
-        vector<int32_t> svs = {29};
-        for (auto sv : svs){
+
+        random_device os_seed;
+        engine generator(os_seed());
+        uniform_int_distribution< u32 > distribute(0, svs.size() - 1);
+
+        logg.algorithm += '{';
+        int i = 0;
+        while (i < count){
+            int32_t sv = svs[distribute(generator)];
+            if (find (sv_list.begin(), sv_list.end(), sv) != sv_list.end()) 
+                continue;
             reachability_tree[sv] = new reachabilityTree(sv);
             sv_list.push_back(sv);
+            logg.algorithm += to_string(sv) + ", ";
+            i++;
         }
+        logg.algorithm += '}';
+
     }
     void update_sv(int32_t u, int32_t v){
         for (auto sv : sv_list){
@@ -523,10 +537,19 @@ void execute_test(const vector<Operation>& operations, string mode){
         logg.duration = chrono::duration_cast<std::chrono::milliseconds>
                         (chrono::high_resolution_clock::now()-started).count();
     }
-    else if (mode == "sv"){
+    else if (mode == "sv_1"){
         auto started = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < TEST_RUN_COUNT; i++){            
-            Sv algg;
+            Sv algg(1);
+            algg.run(operations);
+        }
+        logg.duration = chrono::duration_cast<std::chrono::milliseconds>
+                        (chrono::high_resolution_clock::now()-started).count();
+    }
+    else if (mode == "sv_2"){
+        auto started = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < TEST_RUN_COUNT; i++){            
+            Sv algg(2);
             algg.run(operations);
         }
         logg.duration = chrono::duration_cast<std::chrono::milliseconds>
@@ -542,7 +565,7 @@ int main(int argc, char* argv[]){
     //output should be a chart of all the logs for different algorithms
 
     if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
-        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv")){
+        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv_1") && strcmp(argv[1], "sv_2")){
             cerr << "Wrong Input\n";
             exit(0);
     }
