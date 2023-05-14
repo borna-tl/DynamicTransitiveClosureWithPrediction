@@ -159,11 +159,11 @@ public:
         // printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         // cout << "Queries answered: " << queries_answered << endl;
         // cout << "Reachable queries: " << true_q << endl;
-        ofstream outfile(OUTPUT_FILE, ios_base::app);
-        ostream_iterator<string> output_iterator(outfile, "");
+        // ofstream outfile(OUTPUT_FILE, ios_base::app);
+        // ostream_iterator<string> output_iterator(outfile, "");
         size_t hash_output = hash<vector<bool>>{}(results);
-        outfile << hash<vector<bool>>{}(results) << "\n";
-        outfile.close();
+        // outfile << hash<vector<bool>>{}(results) << "\n";
+        // outfile.close();
         logg.num_queries = queries_answered;
         logg.num_insertions = num_insertions;
         logg.hashed_output = hash_output;
@@ -461,6 +461,7 @@ void read_meta_file(){
     string command;
     infile >> command >> nodes;
     infile >> command >> input_num_lines;
+    infile >> command >> logg.input_file_name;
     nodes++; //because input file is zero-based
     infile.close();
 }
