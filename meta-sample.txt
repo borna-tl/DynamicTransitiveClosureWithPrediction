@@ -1,3 +1,0 @@
-nodes: 131049
-lines: 3512617
-file_name: answers
