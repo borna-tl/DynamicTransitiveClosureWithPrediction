@@ -3,6 +3,7 @@
 #include <queue>
 #include <string>
 #include <sstream> 
+#include <filesystem>
 
 using namespace std;
 using u32    = uint_least32_t; 
@@ -13,25 +14,6 @@ using engine = std::mt19937;
 #define PBSTR "++++++++++++++++++++++++++++++++++++++++++++++++++"
 #define PBWIDTH 50
 
-
-struct Settings{
-    Settings(){}
-
-    vector<pair<uint32_t, uint32_t>> input_file_operations;
-    uint32_t nodes = 0;
-    int input_num_lines = 0;
-    string INPUT_FILE = "sample.txt";
-    string META_FILE = "meta-sample.txt";
-    string OUTPUT_FILE = "output.txt";
-    string LOG_FILE = "log.txt";
-    uint32_t QUERY_PERCENTAGE = 50;
-    uint32_t TEST_RUN_COUNT = 10;
-    uint32_t TIMEOUT_SEC = 1800;
-    uint32_t OPERATION_SEED = 1223;
-    uint32_t QUERY_SEED = 2334;
-} setting;
-
-
 void print_progress(double percentage) {
     int val = (int) (percentage * 100);
     int lpad = (int) (percentage * PBWIDTH);
@@ -40,20 +22,40 @@ void print_progress(double percentage) {
     fflush(stdout);
 }
 
+//add const where applicable
+//add std::
+//add sv generation
+
 
 struct Logger {
     int test_id;
-    string input_file_name = setting.INPUT_FILE;
-    pair <int, int> seed = make_pair(setting.OPERATION_SEED, setting.QUERY_SEED);
     int num_queries = -1;
     int num_insertions = -1;
-    string algorithm; 
+    string algorithm;
     string start_time;
     string end_time;
     vector<int64_t> run_duration; //in mili-seconds
     size_t hashed_output;
     int num_reachable_queries = -1;
-} logg;
+};
+
+struct Setting {
+
+    string INPUT_FILE = "sample.txt";
+    string META_FILE = "meta-sample.txt";
+    string OUTPUT_FILE = "output.txt";
+    string LOG_FILE = "log.txt";
+    
+    string ALGORITHM = "sv_1";
+    uint32_t QUERY_PERCENTAGE = 50;
+    uint32_t TEST_RUN_COUNT = 10;
+    uint32_t TIMEOUT_SEC = 1800;
+    uint32_t OPERATION_SEED = 1223;
+    uint32_t QUERY_SEED = 2334;
+
+    uint32_t nodes = 0;
+};
+
 
 struct Operation {
     Operation(bool is_query_, pair <uint32_t, uint32_t> arguments_) :
@@ -62,17 +64,17 @@ struct Operation {
     pair <uint32_t, uint32_t> arguments;
 };
 
+
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
-    reachabilityTree(){}
-    reachabilityTree(uint32_t id_):id(id_){
-        if (setting.nodes == 0){
+    reachabilityTree(uint32_t id_, uint32_t max_nodes_):id(id_), max_nodes(max_nodes_){
+        if (max_nodes == 0){
             //look for some better form of sending errors
             cout << "Not expecting zero nodes" << endl;
             exit(0);
         }
-        r_plus.resize(setting.nodes);
-        r_minus.resize(setting.nodes);
+        r_plus.resize(max_nodes);
+        r_minus.resize(max_nodes);
         r_plus[id] = true;
         r_minus[id] = true;
     }
@@ -85,12 +87,12 @@ public:
     
     void print_reachability_list(){
         cout << "Reachable Nodes from " << id << ": ";
-        for (size_t i = 0; i < setting.nodes; i++)
+        for (size_t i = 0; i < max_nodes; i++)
             if (r_plus[i])
                 cout << i << " ";
         cout << endl;
         cout << "Reachable Nodes to " << id << ": ";
-        for (size_t i = 0; i < setting.nodes; i++)
+        for (size_t i = 0; i < max_nodes; i++)
             if (r_minus[i])
                 cout << i << " ";
         cout << endl;
@@ -103,10 +105,11 @@ public:
     }
     uint32_t id; 
 private:
+    const uint32_t max_nodes; 
     vector <bool> r_plus;
     vector <bool> r_minus;
 
-    void update_reachability(uint32_t u, uint32_t v, const vector<vector<uint32_t>> &edge, vector<bool>& r){ //read on refrence vs. pointers
+    void update_reachability(uint32_t u, uint32_t v, const vector<vector<uint32_t>> &edge, vector<bool>& r){
         if (r[v])
             return;
         if (!r[u])
@@ -129,7 +132,7 @@ private:
 
 class Algorithms{
 public:
-    Algorithms(){
+    Algorithms(const Setting& setting_, Logger& logg_) : setting(setting_), logg(logg_){
         out_edge.assign(setting.nodes, vector<uint32_t>());
         in_edge.assign(setting.nodes, vector<uint32_t>());
     }
@@ -179,6 +182,8 @@ public:
         logg.num_reachable_queries = true_q;
     }
 protected:
+    const Setting& setting;
+    Logger& logg;
     vector<vector<uint32_t>> out_edge;
     vector<vector<uint32_t>> in_edge;
     vector <bool> results;
@@ -193,7 +198,7 @@ protected:
 class Bfs : public Algorithms{
 
 public:
-    Bfs() : Algorithms(){
+    Bfs(const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_){
         visited_bfs.resize(setting.nodes, false);
     }
     bool calculate_bfs(uint32_t u, uint32_t v){  
@@ -227,7 +232,7 @@ private:
 class Dfs : public Algorithms{
 
 public:
-    Dfs() : Algorithms(){
+    Dfs(const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_){
         visited_dfs.resize(setting.nodes, false);
     }
     bool calculate_dfs(uint32_t u, uint32_t v){ 
@@ -253,7 +258,7 @@ private:
 class Bibfs : public Algorithms{
 
 public:
-    Bibfs() : Algorithms(){
+    Bibfs(const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
     }
@@ -312,32 +317,23 @@ private:
 class Sv : public Algorithms{
 
 public:
-    Sv(int count_) : Algorithms(), count(count_){
+    Sv(int count_, const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_), count(count_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
         generate_sv_list();
     }
-    virtual ~Sv(){
-        // for (auto sv : sv_list){
-        //     delete reachability_tree[sv];
-        // }
-    }
+    virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
         // instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
-        // if (find(sv_list.begin(), sv_list.end(), u) != sv_list.end()){
         auto it = find_sv(u);
         if (it != reachability_tree.end()){
             return (*it)->reaches(v);
-            // return reachability_tree[u]->reaches(v);
         }
         it = find_sv(v);
         if (it != reachability_tree.end()){
             return (*it)->is_reachable_from(u);
         }
-        // if (find(sv_list.begin(), sv_list.end(), v) != sv_list.end()){
-            // return reachability_tree[v]->is_reachable_from(u);
-        // }
         for (auto &rt: reachability_tree){
             //obs. 1
             if (rt->is_reachable_from(u) && rt->reaches(v)){
@@ -358,15 +354,12 @@ public:
         return calculate_sv(u, v);                
     }
 private:
-    //decided to use normal pointers, can use smart pointers later 
     vector<unique_ptr<reachabilityTree>> reachability_tree;
-    // reachabilityTree* reachability_tree[MAX_NODES];
-    // vector <uint32_t> sv_list;
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
     int count;
-    const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){ //check return type later
+    const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
@@ -378,8 +371,6 @@ private:
         // vector<uint32_t> svs = {0,2,3,8,11,16,17,19,20,28}; //for gnutella-25
         // program crashes
         // vector<uint32_t> svs = {0,1,2,4,5,8,16,18,20,24}; //for email-inside
-
-        // sv_list.clear();
 
         random_device os_seed;
         //generate const seed instead of totally rand 
@@ -393,10 +384,9 @@ private:
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
             // reachability_tree[sv] = new reachabilityTree(sv);
-            reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv)));
+            reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv, setting.nodes)));
             // reachability_tree.push_back(make_unique<reachabilityTree>(sv));
             
-            // sv_list.push_back(sv);
             logg.algorithm += to_string(sv) + ", ";
             i++;
         }
@@ -407,10 +397,6 @@ private:
         for (auto &rt : reachability_tree){
             rt->update(u, v, out_edge, in_edge);
         }
-        // for (int i = 0; i < reachability_tree.size(); ++i){
-            // rt->update(u, v, out_edge, in_edge);
-            // (*reachability_tree[i]).update(u, v, out_edge, in_edge);
-        // }
     }
     void add_edge(uint32_t u, uint32_t v){
         out_edge[u].push_back(v);
@@ -463,40 +449,6 @@ private:
     }
 };
 
-int get_test_id(){ //can probably read backwards later to enhance speed
-    string line;
-    ifstream log_file (setting.LOG_FILE);
-    int id = 0;
-    while(getline(log_file, line)) { 
-        if (line.find('*') != string::npos) {
-            id ++;
-        }
-    }
-    return id;
-}
-
-void write_to_log(){
-    ofstream log_file;
-    log_file.open(setting.LOG_FILE, std::ios_base::app);
-    log_file << "test id: " << logg.test_id << '\n' <<
-                "input file name: " << logg.input_file_name << '\n' <<
-                "seed: " << logg.seed.first << ", " << logg.seed.second << '\n' <<
-                "#run: " << setting.TEST_RUN_COUNT << '\n' << 
-                "#queries: " << logg.num_queries << '\n' <<
-                "#insertions: " << logg.num_insertions << '\n' <<
-                "algorithm: " << logg.algorithm << '\n' <<
-                "start time: " << logg.start_time << '\n' <<
-                "end time: " << logg.end_time << '\n' <<
-                "duration: " << std::accumulate(logg.run_duration.begin(),
-                                    logg.run_duration.end(), decltype(logg.run_duration)::
-                                    value_type(0)) << "{";
-                for (auto x : logg.run_duration)
-                    log_file << x << " ";
-                log_file << '}' << '\n' <<
-                "hashed output: " << logg.hashed_output << '\n' <<
-                "#reachable queries: " << logg.num_reachable_queries << '\n' <<
-                string(50, '*') << "\n";
-}
 
 void set_time(string& t){
     auto timepoint = chrono::system_clock::now();
@@ -510,92 +462,211 @@ void set_time(string& t){
     t = buffer;
 }
 
-void read_meta_file(){
-    ifstream infile(setting.META_FILE);
-    string command;
-    infile >> command >> setting.nodes;
-    infile >> command >> setting.input_num_lines;
-    infile >> command >> logg.input_file_name;
-    setting.nodes++; //because input file is zero-based
-    infile.close();
-}
 
-void read_input_file(){
-    ifstream infile(setting.INPUT_FILE);
-    uint32_t u, v;
-    while (infile >> u >> v){
-        setting.input_file_operations.push_back(make_pair(u, v));
-    }
-    infile.close();
-}
 
-void generate_operations (vector<Operation>& operations){
-    // random_device os_seed; //can use later for seeding engine.
-    engine generator(setting.OPERATION_SEED);
-    engine query_generator(setting.QUERY_SEED);
-    uniform_int_distribution< u32 > distribute(0, 99);
-    uniform_int_distribution< u32 > query_chance_distribute(0, setting.nodes-1);
-    uint32_t u, v;
-
-    for (auto x : setting.input_file_operations){
-        u = x.first;
-        v = x.second;
-        while (distribute(generator) < setting.QUERY_PERCENTAGE){
-            uint32_t u_q = query_chance_distribute(query_generator);
-            uint32_t v_q = query_chance_distribute(query_generator);
-            operations.push_back(Operation(true, make_pair(u_q, v_q)));
+class Program{
+public:
+    Program(){}
+    void read_parse_input(int argc, char* argv[]){
+        for (int i = 1; i < argc; i += 2){
+            if (!strcmp(argv[i], "-alg")){
+                if (strcmp(argv[i+1], "dfs") && strcmp(argv[i+1], "bfs") && 
+                    strcmp(argv[i+1], "bibfs") && strcmp(argv[i+1], "sv_1") &&
+                    strcmp(argv[i+1], "sv_2")){
+                    cerr << "Wrong Input for Algorithm.\n";
+                    exit(0);
+                }
+                setting.ALGORITHM = argv[i+1];
+            }
+            if (!strcmp(argv[i], "-qp")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1]) || 
+                    stoi(argv[i+1]) < 0 || stoi(argv[i+1]) > 100){
+                    cerr << "Wrong Input for Query Percentage.\n";
+                    exit(0);
+                }
+                setting.QUERY_PERCENTAGE = stoi(argv[i+1]);
+            }
+            if (!strcmp(argv[i], "-trc")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1])){
+                    cerr << "Wrong Input for Test Run Count.\n";
+                    exit(0);
+                }
+                setting.TEST_RUN_COUNT = stoi(argv[i+1]);
+            }
+            if (!strcmp(argv[i], "-ts")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1])){
+                    cerr << "Wrong Input for Timeout Seconds.\n";
+                    exit(0);
+                }
+                setting.TIMEOUT_SEC = stoi(argv[i+1]);
+            }
+            if (!strcmp(argv[i], "-os")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1])){
+                    cerr << "Wrong Input for Operation Seed.\n";
+                    exit(0);
+                }
+                setting.OPERATION_SEED = stoi(argv[i+1]);
+            }
+            if (!strcmp(argv[i], "-qs")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1])){
+                    cerr << "Wrong Input for Query Seed.\n";
+                    exit(0);
+                }
+                setting.QUERY_SEED = stoi(argv[i+1]);
+            }
+            if (!strcmp(argv[i], "-inp")){
+                std::ifstream infile(argv[i+1]);
+                if (!infile.good()){
+                    cerr << "Input File Does Not Exist.\n";
+                    exit(0);
+                }
+                setting.INPUT_FILE = argv[i+1];
+            }
+            if (!strcmp(argv[i], "-meta")){
+                std::ifstream infile(argv[i+1]);
+                if (!infile.good()){
+                    cerr << "Meta File Does Not Exist.\n";
+                    exit(0);
+                }
+                setting.META_FILE = argv[i+1];
+            }
+            if (!strcmp(argv[i], "-out")){
+                std::ifstream infile(argv[i+1]);
+                if (!infile.good()){
+                    cerr << "Warning: Output File Did Not Exist. One Will Be Created.\n";
+                }
+                setting.OUTPUT_FILE = argv[i+1];
+            }
+            if (!strcmp(argv[i], "-log")){
+                std::ifstream infile(argv[i+1]);
+                if (!infile.good()){
+                    cerr << "Warning: Log File Did Not Exist. One Will Be Created.\n";
+                }
+                setting.LOG_FILE = argv[i+1];
+            }
         }
-        operations.push_back(Operation(false, make_pair(u, v)));
-    }
-}
+        read_meta_file();
+        operations.reserve(input_num_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
+        read_input_file(); //read and store input file in "input_file_operations"
+        generate_operations(); //add query operatios to "input_file_operations" and store result in "operations"
 
-void execute_test(const vector<Operation>& operations, string mode){
-    
-    for (size_t i = 0; i < setting.TEST_RUN_COUNT; i++){
-        unique_ptr<Algorithms> alg;  // use smart pointer
-        if (mode == "dfs")
-            alg = unique_ptr<Algorithms>(new Dfs());
-        else if (mode == "bfs")
-            alg = unique_ptr<Algorithms>(new Bfs());
-        else if (mode == "bibfs")
-            alg = unique_ptr<Algorithms>(new Bibfs());
-        else if (mode == "sv_1")
-            alg = unique_ptr<Algorithms>(new Sv(1));
-        else if (mode == "sv_2")
-            alg = unique_ptr<Algorithms>(new Sv(2));
-        else
-            assert(false);
-        auto started = std::chrono::high_resolution_clock::now();
-        alg->run(operations);
-        logg.run_duration.push_back(chrono::duration_cast<std::chrono::milliseconds>
-                         (chrono::high_resolution_clock::now()-started).count());
+        logg.test_id = get_test_id();
+        logg.algorithm = setting.ALGORITHM; 
     }
-   
-}
 
+    void execute_test(){
+        set_time(logg.start_time);
+
+        for (size_t i = 0; i < setting.TEST_RUN_COUNT; i++){
+            unique_ptr<Algorithms> alg;  // use smart pointer
+            if (setting.ALGORITHM == "dfs")
+                alg = unique_ptr<Algorithms>(new Dfs(setting, logg));
+            else if (setting.ALGORITHM == "bfs")
+                alg = unique_ptr<Algorithms>(new Bfs(setting, logg));
+            else if (setting.ALGORITHM == "bibfs")
+                alg = unique_ptr<Algorithms>(new Bibfs(setting, logg));
+            else if (setting.ALGORITHM == "sv_1")
+                alg = unique_ptr<Algorithms>(new Sv(1, setting, logg));
+            else if (setting.ALGORITHM == "sv_2")
+                alg = unique_ptr<Algorithms>(new Sv(2, setting, logg));
+            else
+                assert(false);
+            auto started = std::chrono::high_resolution_clock::now();
+            alg->run(operations);
+            logg.run_duration.push_back(chrono::duration_cast<std::chrono::milliseconds>
+                            (chrono::high_resolution_clock::now()-started).count());
+        }
+        
+        set_time(logg.end_time);
+    }
+
+    void write_to_log(){
+        ofstream log_file;
+        log_file.open(setting.LOG_FILE, std::ios_base::app);
+        log_file << "test id: " << logg.test_id << '\n' <<
+                    "input file name: " << setting.INPUT_FILE << '\n' <<
+                    "seed: " << setting.OPERATION_SEED << ", " << setting.QUERY_SEED << '\n' <<
+                    "#run: " << setting.TEST_RUN_COUNT << '\n' << 
+                    "#queries: " << logg.num_queries << '\n' <<
+                    "#insertions: " << logg.num_insertions << '\n' <<
+                    "algorithm: " << logg.algorithm << '\n' <<
+                    "start time: " << logg.start_time << '\n' <<
+                    "end time: " << logg.end_time << '\n' <<
+                    "duration: " << std::accumulate(logg.run_duration.begin(),
+                                        logg.run_duration.end(), decltype(logg.run_duration)::
+                                        value_type(0)) << "{";
+                    for (auto x : logg.run_duration)
+                        log_file << x << " ";
+                    log_file << '}' << '\n' <<
+                    "hashed output: " << logg.hashed_output << '\n' <<
+                    "#reachable queries: " << logg.num_reachable_queries << '\n' <<
+                    string(50, '*') << "\n";
+    }
+
+
+private:
+    Setting setting;
+    Logger logg;
+    int input_num_lines = 0;
+    vector<pair<uint32_t, uint32_t>> input_file_operations;
+    vector<Operation> operations;
+    void read_meta_file(){
+        ifstream infile(setting.META_FILE);
+        string command;
+        infile >> command >> setting.nodes;
+        infile >> command >> input_num_lines;
+        infile >> command >> setting.INPUT_FILE;
+        setting.nodes++; //because input file is zero-based
+        infile.close();
+    }
+    void read_input_file(){
+        ifstream infile(setting.INPUT_FILE);
+        uint32_t u, v;
+        while (infile >> u >> v){
+            input_file_operations.push_back(make_pair(u, v));
+        }
+        infile.close();
+    }
+    void generate_operations (){
+        // random_device os_seed; //can use later for seeding engine.
+        engine generator(setting.OPERATION_SEED);
+        engine query_generator(setting.QUERY_SEED);
+        uniform_int_distribution< u32 > distribute(0, 99);
+        uniform_int_distribution< u32 > query_chance_distribute(0, setting.nodes-1);
+        uint32_t u, v;
+
+        for (auto x : input_file_operations){
+            u = x.first;
+            v = x.second;
+            while (distribute(generator) < setting.QUERY_PERCENTAGE){
+                uint32_t u_q = query_chance_distribute(query_generator);
+                uint32_t v_q = query_chance_distribute(query_generator);
+                operations.push_back(Operation(true, make_pair(u_q, v_q)));
+            }
+            operations.push_back(Operation(false, make_pair(u, v)));
+        }
+    }
+    int get_test_id(){ //can probably read backwards later to enhance speed
+        string line;
+        ifstream log_file (setting.LOG_FILE);
+        int id = 0;
+        while(getline(log_file, line)) { 
+            if (line.find('*') != string::npos) {
+                id ++;
+            }
+        }
+        return id;
+    }
+
+};
 
 int main(int argc, char* argv[]){
 
+    Program program; 
+    program.read_parse_input(argc, argv);
     
-    if (strcmp(argv[1], "dfs") && strcmp(argv[1], "bfs") && 
-        strcmp(argv[1], "bibfs") && strcmp(argv[1], "sv_1") && strcmp(argv[1], "sv_2")){
-            cerr << "Wrong Input\n";
-            exit(0);
-    }
-    
-    read_meta_file();
-    vector<Operation> operations;
-    operations.reserve(setting.input_num_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
-    read_input_file(); //read and store input file in "input_file_operations"
-    generate_operations(operations); //add query operatios to "input_file_operations" and store result in "operations"
+    program.execute_test();
 
-    logg.test_id = get_test_id();
-    logg.algorithm = argv[1]; 
-    set_time(logg.start_time);
-
-    execute_test(operations, argv[1]);
-    
-    set_time(logg.end_time);
-    write_to_log();
+    program.write_to_log();
 
 }
