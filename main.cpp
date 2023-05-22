@@ -317,10 +317,10 @@ private:
 class Sv : public Algorithms{
 
 public:
-    Sv(int count_, const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_), count(count_){
+    Sv(int count_, const Setting& setting_, Logger& logg_, uint32_t sv_seed_) : Algorithms(setting_, logg_), count(count_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
-        generate_sv_list();
+        generate_sv_list(sv_seed_);
     }
     virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
@@ -363,8 +363,8 @@ private:
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
-    void generate_sv_list(){
-        vector<uint32_t> svs = {0,2,8,9,10,12,16,17,19,29}; //from katherin's work for answers
+    void generate_sv_list(uint32_t sv_seed){
+        // vector<uint32_t> svs = {0,2,8,9,10,12,16,17,19,29}; //from katherin's work for answers
         // vector<uint32_t> svs = {0,1,2,4,5,6,7,8,12,16}; //for bio-protein
         // vector<uint32_t> svs = {0,1,2,5,10,12,16,17,19,20}; //for blog-nat05-6m
         // vector<uint32_t> svs = {0,2,4,5,8,9,10,16,17,24}; //for ca-dblp
@@ -372,15 +372,14 @@ private:
         // program crashes
         // vector<uint32_t> svs = {0,1,2,4,5,8,16,18,20,24}; //for email-inside
 
-        random_device os_seed;
-        //generate const seed instead of totally rand 
-        engine generator(os_seed());
-        uniform_int_distribution< u32 > distribute(0, svs.size() - 1);
+        // random_device os_seed;
+        engine generator(sv_seed);
+        uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
 
         logg.algorithm += '{';
         int i = 0;
         while (i < count){
-            uint32_t sv = svs[distribute(generator)];
+            uint32_t sv = distribute(generator);
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
             // reachability_tree[sv] = new reachabilityTree(sv);
@@ -566,9 +565,9 @@ public:
             else if (setting.ALGORITHM == "bibfs")
                 alg = unique_ptr<Algorithms>(new Bibfs(setting, logg));
             else if (setting.ALGORITHM == "sv_1")
-                alg = unique_ptr<Algorithms>(new Sv(1, setting, logg));
+                alg = unique_ptr<Algorithms>(new Sv(1, setting, logg, i)); //random seed i for sv generation
             else if (setting.ALGORITHM == "sv_2")
-                alg = unique_ptr<Algorithms>(new Sv(2, setting, logg));
+                alg = unique_ptr<Algorithms>(new Sv(2, setting, logg, i));
             else
                 assert(false);
             auto started = std::chrono::high_resolution_clock::now();
@@ -610,6 +609,7 @@ private:
     int input_num_lines = 0;
     vector<pair<uint32_t, uint32_t>> input_file_operations;
     vector<Operation> operations;
+
     void read_meta_file(){
         ifstream infile(setting.META_FILE);
         string command;

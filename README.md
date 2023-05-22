@@ -21,8 +21,8 @@ where *run_settings* has the following structure ```{flag} {arg}```
 | -out  | Any string                    | output.txt      | Output file name                             |
 | -log  | Any string                    | log.txt         | Log file name                                |
 
+### example
 
-### example:
 ```./main -alg sv_2 -qp 40 -log log.txt```
 
 > **Note**
