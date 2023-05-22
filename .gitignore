@@ -6,3 +6,4 @@ log-*.txt
 meta-*.txt
 answers
 as-newman
+.markdownlint.json
