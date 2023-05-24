@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream> 
 #include <filesystem>
+#include <algorithm>
 
 using namespace std;
 using u32    = uint_least32_t; 
@@ -24,8 +25,7 @@ void print_progress(double percentage) {
 
 //add const where applicable
 //add std::
-//add sv generation
-
+//maybe use static inline?
 
 struct Logger {
     int test_id;
@@ -54,6 +54,7 @@ struct Setting {
     uint32_t QUERY_SEED = 2334;
 
     uint32_t nodes = 0;
+    uint32_t input_lines = 0;
 };
 
 
@@ -164,10 +165,10 @@ public:
                     cerr << "Timeout!" << endl;
                     exit(0);
                 }
-                // print_progress((double)(queries_answered+num_insertions)/operations.size());
+                print_progress((double)(queries_answered+num_insertions)/operations.size());
             }
         }
-        // cout << endl;
+        cout << endl;
         // printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
         // cout << "Queries answered: " << queries_answered << endl;
         // cout << "Reachable queries: " << true_q << endl;
@@ -371,15 +372,17 @@ private:
         // vector<uint32_t> svs = {0,2,3,8,11,16,17,19,20,28}; //for gnutella-25
         // program crashes
         // vector<uint32_t> svs = {0,1,2,4,5,8,16,18,20,24}; //for email-inside
-
         // random_device os_seed;
         engine generator(sv_seed);
         uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
+        // uniform_int_distribution< u32 > distribute(0, svs.size() - 1);
 
         logg.algorithm += '{';
         int i = 0;
+
         while (i < count){
             uint32_t sv = distribute(generator);
+            // uint32_t sv = svs[distribute(generator)];
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
             // reachability_tree[sv] = new reachabilityTree(sv);
@@ -544,9 +547,9 @@ public:
                 setting.LOG_FILE = argv[i+1];
             }
         }
-        read_meta_file();
-        operations.reserve(input_num_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
+        // read_meta_file();
         read_input_file(); //read and store input file in "input_file_operations"
+        operations.reserve(setting.input_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
         generate_operations(); //add query operatios to "input_file_operations" and store result in "operations"
 
         logg.test_id = get_test_id();
@@ -555,9 +558,8 @@ public:
 
     void execute_test(){
         set_time(logg.start_time);
-
         for (size_t i = 0; i < setting.TEST_RUN_COUNT; i++){
-            unique_ptr<Algorithms> alg;  // use smart pointer
+            unique_ptr<Algorithms> alg; 
             if (setting.ALGORITHM == "dfs")
                 alg = unique_ptr<Algorithms>(new Dfs(setting, logg));
             else if (setting.ALGORITHM == "bfs")
@@ -606,21 +608,63 @@ public:
 private:
     Setting setting;
     Logger logg;
-    int input_num_lines = 0;
+    // int input_num_lines = 0;
     vector<pair<uint32_t, uint32_t>> input_file_operations;
     vector<Operation> operations;
 
-    void read_meta_file(){
-        ifstream infile(setting.META_FILE);
-        string command;
-        infile >> command >> setting.nodes;
-        infile >> command >> input_num_lines;
-        infile >> command >> setting.INPUT_FILE;
-        setting.nodes++; //because input file is zero-based
-        infile.close();
+    // void read_meta_file(){
+    //     ifstream infile(setting.META_FILE);
+    //     string command;
+    //     infile >> command >> setting.nodes;
+    //     infile >> command >> input_num_lines;
+    //     infile >> command >> setting.INPUT_FILE;
+    //     setting.nodes++; //because input file is zero-based
+    //     infile.close();
+    // }
+
+    void convert_input(){
+        ifstream file(setting.INPUT_FILE);
+        std::filesystem::path p(setting.INPUT_FILE);
+        if (filesystem::exists("build/" + string(p.filename()))){
+            cout << "Directory already exists." << endl;
+            // return;
+        }
+        else{
+            filesystem::create_directories("build");
+        }
+        // std::cout << "filename and extension: " << p.filename() << std::endl; // "file.ext"
+        ofstream new_file("build/" + string(p.filename()) , std::ios::trunc);
+        // ofstream meta_file("meta-sample.txt");
+        uint32_t max_nodes = 0;
+        uint32_t lines = 0;
+        // string i;
+        // while (getline(file, i)) {
+        uint32_t u, v;
+        string type, timestamp;
+        while (file >> u >> v >> type >> timestamp){
+            
+            max_nodes = max(max_nodes, max(u, v));
+            if (type == "+1") {
+                new_file << u << " " << v << endl;
+                lines++;
+            }
+        }
+        setting.nodes = max_nodes + 1;
+        // meta_file << "nodes: " << m << endl;
+        setting.input_lines = lines; 
+        // meta_file << "lines: " << lines << endl;
+        // meta_file << "file_name: " << file_name;
+        new_file.close();
+        // meta_file.close();
+        // rename("sample.txt", "MyImplementation/sample.txt");
+        // rename("meta-sample.txt", "MyImplementation/meta-sample.txt");
+        // return 0;
     }
     void read_input_file(){
-        ifstream infile(setting.INPUT_FILE);
+        convert_input();
+        cout << "Input generated!" << endl;
+        std::filesystem::path p(setting.INPUT_FILE);
+        ifstream infile("build/" + string(p.filename()));
         uint32_t u, v;
         while (infile >> u >> v){
             input_file_operations.push_back(make_pair(u, v));
@@ -634,7 +678,6 @@ private:
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, setting.nodes-1);
         uint32_t u, v;
-
         for (auto x : input_file_operations){
             u = x.first;
             v = x.second;

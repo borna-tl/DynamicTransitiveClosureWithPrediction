@@ -4,6 +4,10 @@ valgrind-out.txt
 log.txt
 log-*.txt
 meta-*.txt
-answers
+
 as-newman
 .markdownlint.json
+samples
+*.txt
+build
+samples
