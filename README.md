@@ -1,8 +1,8 @@
 # suchrandom
 
-## to compile
+## To Compile
 
-first you need to <pre><code> make </code></pre> the executable file.
+First, you need to <pre><code> make </code></pre> the executable file.
 
 Then run <pre><code> ./main <i>run_settings</i> </code></pre>
 
@@ -33,10 +33,27 @@ nds                      |
 | -log  | Any string                    | log.txt         | Log file name
                          |
 
-### example
+### Example
 
 ```./main -alg sv_2 -qp 40 -log log.txt```
 
 > **Note**
-> you may need to set stack size to unlimited for dfs; use
+> You may need to set stack size to unlimited for dfs; use
 ```ulimit -s unlimited``` before running the executable.
+
+## Samples
+
+For now, all samples are available [here](https://dyreach.taa.univie.ac.at/).
+You can download and extract them and give the path as an input (with
+ flag *-inp*) to the executable.
+
+> **Note**
+> Since the operations for our project are insertions-only (in contrast to
+ the fully dynamic case), we have to generate our own input. This new input is stored
+ in a *build* folder in the same directory as the original input.
+
+## Inputs
+
+Our inputs have the following form *u v* where u and v are vertices for our
+edge insertions (sequentially). After each edge insertion, by *-qp* chance, there
+will be a query operation which is generated randomly over all the vertices.
