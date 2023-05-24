@@ -54,6 +54,7 @@ You can download and extract them and give the path as an input (with
 
 ## Inputs
 
-Our inputs have the following form *u v* where u and v are vertices for our
-edge insertions (sequentially). After each edge insertion, by *-qp* chance, there
-will be a query operation which is generated randomly over all the vertices.
+Our inputs consist of the following line ```u v``` where *u* and *v* are
+vertices for our edge insertions (sequentially). After each edge insertion,
+by *-qp* chance, there will be a query operation which is generated randomly
+over all the vertices.
