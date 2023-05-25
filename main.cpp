@@ -681,7 +681,7 @@ private:
         for (auto x : input_file_operations){
             u = x.first;
             v = x.second;
-            while (distribute(generator) < setting.QUERY_PERCENTAGE){
+            if (distribute(generator) < setting.QUERY_PERCENTAGE){
                 uint32_t u_q = query_chance_distribute(query_generator);
                 uint32_t v_q = query_chance_distribute(query_generator);
                 operations.push_back(Operation(true, make_pair(u_q, v_q)));
