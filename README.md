@@ -8,30 +8,18 @@ Then run <pre><code> ./main <i>run_settings</i> </code></pre>
 
 where *run_settings* has the following structure ```{flag} {arg}```
 
-| Flag  | Argument range                | Default         | Description
-                         |
-| ----- | ----------------------------- | --------------- | --------------------
------------------------- |
-| -alg  | {bfs, dfs, bibfs, sv_1, sv_2} | sv_1            | Choose your favorite
- algorithm               |
-| -qp   | [0, 100]                      | 50              | Query Percentage
-                         |
-| -trc  | Any Int                       | 10              | Test Run Count (#tim
-es to run the experiment)|
-| -ts   | Any Int                       | 1800            | Set time out in seco
-nds                      |
-| -os   | Any Int                       | 1223            | Set Operation Seed  
-                         |
-| -qs   | Any Int                       | 2334            | Set Query Seed
-                         |
-| -inp  | Any string                    | sample.txt      | Input file name
-                         |
-| -meta | Any string                    | meta-sample.txt | Meta file name
-                         |
-| -out  | Any string                    | output.txt      | Output file name
-                         |
-| -log  | Any string                    | log.txt         | Log file name
-                         |
+| Flag  | Argument range                | Default         | Description                                  |
+| ----- | ----------------------------- | --------------- | -------------------------------              |
+| -alg  | {bfs, dfs, bibfs, sv_1, sv_2} | sv_1            | Choose your favorite algorithm               |
+| -qp   | [0, 100]                      | 50              | Query Percentage                             |
+| -trc  | Any Int                       | 10              | Test Run Count (#times to run the experiment)|
+| -ts   | Any Int                       | 1800            | Set time out in seconds                      |
+| -os   | Any Int                       | 1223            | Set Operation Seed                           |
+| -qs   | Any Int                       | 2334            | Set Query Seed                               |
+| -inp  | Any string                    | sample.txt      | Input file name                              |
+| -meta | Any string                    | meta-sample.txt | Meta file name                               |
+| -out  | Any string                    | output.txt      | Output file name                             |
+| -log  | Any string                    | log.txt         | Log file name                                |
 
 ### Example
 
@@ -54,7 +42,7 @@ You can download and extract them and give the path as an input (with
 
 ## Inputs
 
-Our inputs consist of the following line ```u v``` where *u* and *v* are
+Our inputs consist of the following line(s) ```u v``` where *u* and *v* are
 vertices for our edge insertions (sequentially). After each edge insertion,
 by *-qp* chance, there will be a query operation which is generated randomly
 over all the vertices.
