@@ -1,0 +1,18 @@
+{
+  "MD033": {
+    "allowed_elements": [
+      "nobr",
+      "sup",
+      "div",
+      "i",
+      "pre",
+      "code"
+    ]
+  },
+  "MD013": {
+      "line_length": 80,
+      "code_block_line_length": 120,
+      "tables": false
+    }
+  
+}

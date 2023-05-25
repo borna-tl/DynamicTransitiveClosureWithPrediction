@@ -6,7 +6,6 @@ log-*.txt
 meta-*.txt
 
 as-newman
-.markdownlint.json
 samples
 *.txt
 build
