@@ -35,6 +35,8 @@ struct Logger {
     string start_time;
     string end_time;
     vector<int64_t> run_duration; //in mili-seconds
+    int64_t query_duration = 0;
+    int64_t insetion_duration = 0;
     size_t hashed_output;
     int num_reachable_queries = -1;
 };
@@ -68,7 +70,10 @@ struct Operation {
 
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
-    reachabilityTree(uint32_t id_, uint32_t max_nodes_):id(id_), max_nodes(max_nodes_){
+    reachabilityTree(uint32_t id_, uint32_t max_nodes_, 
+                        const vector<vector<uint32_t>> &out_edge,
+                        const vector<vector<uint32_t>> &in_edge):
+                        id(id_), max_nodes(max_nodes_){
         if (max_nodes == 0){
             //look for some better form of sending errors
             cout << "Not expecting zero nodes" << endl;
@@ -76,11 +81,32 @@ public:
         }
         r_plus.resize(max_nodes);
         r_minus.resize(max_nodes);
-        r_plus[id] = true;
-        r_minus[id] = true;
+        initialize(out_edge, r_plus);
+        initialize(in_edge, r_minus);
+
+        // r_plus[id] = true;
+        // r_minus[id] = true;
     }
     ~reachabilityTree(){}
 
+    void initialize(const vector<vector<uint32_t>> &edge, vector<bool>& r){
+        vector<uint32_t> q;
+        size_t pointer = 0;
+        r[id] = true;
+        q.push_back(id); 
+        uint32_t u;
+        while (pointer < q.size()) {
+            u = q[pointer];
+            pointer++;
+            for (uint32_t i : edge[u]){
+                if (!r[i]){
+                    r[i] = true;
+                    q.push_back(i);
+                }
+            }
+        }
+        
+    }
     void update(uint32_t u, uint32_t v, const vector<vector<uint32_t>> &out_edge, const vector<vector<uint32_t>> &in_edge){
         update_reachability(u, v, out_edge, r_plus); //source reachability
         update_reachability(v, u, in_edge, r_minus); //sink reachability
@@ -149,13 +175,19 @@ public:
             u = x.arguments.first;
             v = x.arguments.second;
             if (x.is_query){
+                auto started = std::chrono::high_resolution_clock::now();
                 bool result = answer_query(u, v);   
+                logg.query_duration += (chrono::duration_cast<std::chrono::microseconds>
+                            (chrono::high_resolution_clock::now()-started).count());
                 queries_answered ++;          
                 true_q += (result == true); 
                 results.push_back(result);
             }
             else{
+                auto started = std::chrono::high_resolution_clock::now();
                 add_edge(u, v);
+                logg.insetion_duration += chrono::duration_cast<std::chrono::microseconds>
+                            (chrono::high_resolution_clock::now()-started).count();                
                 num_insertions++;
             }
             c_out++;
@@ -321,7 +353,10 @@ public:
     Sv(int count_, const Setting& setting_, Logger& logg_, uint32_t sv_seed_) : Algorithms(setting_, logg_), count(count_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
-        generate_sv_list(sv_seed_);
+        // generate_sv_list(sv_seed_);
+        sv_seed = sv_seed_;
+        sqrt_n = sqrt(setting.nodes);
+        cout << "sqrt n was: " << sqrt_n << endl;
     }
     virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
@@ -352,6 +387,11 @@ public:
         return calculate_bibfs(u, v);
     }
     bool answer_query (uint32_t u, uint32_t v){
+        if (insertions_sofar == sqrt_n){
+            generate_sv_list(sv_seed);
+            insertions_sofar++;
+        }
+        
         return calculate_sv(u, v);                
     }
 private:
@@ -360,18 +400,14 @@ private:
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
     int count;
+    int insertions_sofar = 0, sqrt_n;
+    uint32_t sv_seed;
+    bool should_make_sv = false;
     const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
     void generate_sv_list(uint32_t sv_seed){
-        // vector<uint32_t> svs = {0,2,8,9,10,12,16,17,19,29}; //from katherin's work for answers
-        // vector<uint32_t> svs = {0,1,2,4,5,6,7,8,12,16}; //for bio-protein
-        // vector<uint32_t> svs = {0,1,2,5,10,12,16,17,19,20}; //for blog-nat05-6m
-        // vector<uint32_t> svs = {0,2,4,5,8,9,10,16,17,24}; //for ca-dblp
-        // vector<uint32_t> svs = {0,2,3,8,11,16,17,19,20,28}; //for gnutella-25
-        // program crashes
-        // vector<uint32_t> svs = {0,1,2,4,5,8,16,18,20,24}; //for email-inside
         // random_device os_seed;
         engine generator(sv_seed);
         uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
@@ -385,8 +421,10 @@ private:
             // uint32_t sv = svs[distribute(generator)];
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
+            if (is_isolate(sv))
+                continue;
             // reachability_tree[sv] = new reachabilityTree(sv);
-            reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv, setting.nodes)));
+            reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv, setting.nodes, out_edge, in_edge)));
             // reachability_tree.push_back(make_unique<reachabilityTree>(sv));
             
             logg.algorithm += to_string(sv) + ", ";
@@ -394,6 +432,9 @@ private:
         }
         logg.algorithm += '}';
 
+    }
+    bool is_isolate(uint32_t u){
+        return (out_edge[u].size() == 0 && in_edge[u].size() == 0);
     }
     void update_sv(uint32_t u, uint32_t v){
         for (auto &rt : reachability_tree){
@@ -404,6 +445,7 @@ private:
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
         update_sv(u, v);
+        insertions_sofar ++; //for testing
     }
     bool calculate_bibfs(uint32_t u, uint32_t v){  
         bool found_path = false;
@@ -473,8 +515,7 @@ public:
         for (int i = 1; i < argc; i += 2){
             if (!strcmp(argv[i], "-alg")){
                 if (strcmp(argv[i+1], "dfs") && strcmp(argv[i+1], "bfs") && 
-                    strcmp(argv[i+1], "bibfs") && strcmp(argv[i+1], "sv_1") &&
-                    strcmp(argv[i+1], "sv_2")){
+                    strcmp(argv[i+1], "bibfs") && string(argv[i+1]).substr(0, 3) != "sv_") {
                     cerr << "Wrong Input for Algorithm.\n";
                     exit(0);
                 }
@@ -566,10 +607,13 @@ public:
                 alg = unique_ptr<Algorithms>(new Bfs(setting, logg));
             else if (setting.ALGORITHM == "bibfs")
                 alg = unique_ptr<Algorithms>(new Bibfs(setting, logg));
-            else if (setting.ALGORITHM == "sv_1")
-                alg = unique_ptr<Algorithms>(new Sv(1, setting, logg, i)); //random seed i for sv generation
-            else if (setting.ALGORITHM == "sv_2")
-                alg = unique_ptr<Algorithms>(new Sv(2, setting, logg, i));
+            // else if (setting.ALGORITHM == "sv_1")
+            //     alg = unique_ptr<Algorithms>(new Sv(1, setting, logg, i)); //random seed i for sv generation
+            // else if (setting.ALGORITHM == "sv_2")
+            //     alg = unique_ptr<Algorithms>(new Sv(2, setting, logg, i));
+            else if (setting.ALGORITHM.substr(0, 3) == "sv_"){
+                alg = unique_ptr<Algorithms>(new Sv(stoi(setting.ALGORITHM.substr(3)), setting, logg, i));
+            }
             else
                 assert(false);
             auto started = std::chrono::high_resolution_clock::now();
@@ -599,6 +643,8 @@ public:
                     for (auto x : logg.run_duration)
                         log_file << x << " ";
                     log_file << '}' << '\n' <<
+                    "queries duration: " << logg.query_duration << '\n' <<
+                    "insertions duration: " << logg.insetion_duration << '\n' <<
                     "hashed output: " << logg.hashed_output << '\n' <<
                     "#reachable queries: " << logg.num_reachable_queries << '\n' <<
                     string(50, '*') << "\n";
