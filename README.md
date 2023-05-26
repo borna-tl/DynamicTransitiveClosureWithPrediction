@@ -10,7 +10,7 @@ where *run_settings* has the following structure ```{flag} {arg}```
 
 | Flag  | Argument range                | Default         | Description                                  |
 | ----- | ----------------------------- | --------------- | -------------------------------              |
-| -alg  | {bfs, dfs, bibfs, sv_1, sv_2} | sv_1            | Choose your favorite algorithm               |
+| -alg  | {bfs, dfs, bibfs, sv_*k*}     | sv_1            | Choose your favorite algorithm.              |
 | -qp   | [0, 100]                      | 50              | Query Percentage                             |
 | -trc  | Any Int                       | 10              | Test Run Count (#times to run the experiment)|
 | -ts   | Any Int                       | 1800            | Set time out in seconds                      |
