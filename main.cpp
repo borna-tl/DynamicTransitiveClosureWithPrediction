@@ -356,7 +356,6 @@ public:
         // generate_sv_list(sv_seed_);
         sv_seed = sv_seed_;
         sqrt_n = sqrt(setting.nodes);
-        cout << "sqrt n was: " << sqrt_n << endl;
     }
     virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
