@@ -12,6 +12,7 @@ where *run_settings* has the following structure ```{flag} {arg}```
 | ----- | ----------------------------- | --------------- | -------------------------------              |
 | -alg  | {bfs, dfs, bibfs, sv_*k*}     | sv_1            | Choose your favorite algorithm.              |
 | -qp   | [0, 100]                      | 50              | Query Percentage                             |
+| -qt   | Any Int                       | 0               | Query Timestamp                              |
 | -trc  | Any Int                       | 10              | Test Run Count (#times to run the experiment)|
 | -ts   | Any Int                       | 1800            | Set time out in seconds                      |
 | -os   | Any Int                       | 1223            | Set Operation Seed                           |
@@ -42,7 +43,12 @@ You can download and extract them and give the path as an input (with
 
 ## Inputs
 
-Our inputs consist of the following line(s) ```u v``` where *u* and *v* are
-vertices for our edge insertions (sequentially). After each edge insertion,
-by *-qp* chance, there will be a query operation which is generated randomly
+Our inputs consist of the following line(s) ```u v t``` where *u* and *v* are
+vertices for our edge insertions (sequentially), and *t* is the timestamp.
+The timestamps are non-decreasing and by setting *-qt*, you can specify the timestamp
+for our initial graph (i.e. edge insertions before *qt* make up the initial graph).
+After we have generated our initial graph, by *-qp* chance, there will be a
+query operation after each insertion. The query operations are generated randomly
 over all the vertices.
+
+<!-- add log description later-->
