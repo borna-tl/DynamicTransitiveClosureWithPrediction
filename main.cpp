@@ -7,7 +7,7 @@
 #include <algorithm>
 
 using namespace std;
-using u32    = uint_least32_t; 
+using u32    = uint_least32_t;
 using engine = std::mt19937;
 
 
@@ -28,17 +28,24 @@ void print_progress(double percentage) {
 //maybe use static inline?
 
 struct Logger {
+    void reset(){
+        num_reachable_queries = 0;
+        curr_insertion_cnt = 0;
+        curr_query_cnt = 0;
+    }
     int test_id;
-    int num_queries = -1;
-    int num_insertions = -1;
     string algorithm;
+    uint32_t query_operations_cnt = 0;
+    uint32_t insertion_operations_cnt = 0;
     string start_time;
     string end_time;
-    vector<int64_t> run_duration; //in mili-seconds
-    int64_t query_duration = 0;
-    int64_t insetion_duration = 0;
+    vector<int64_t> run_durations; //in mili-seconds
+    vector<int64_t> query_durations;
+    vector<int64_t> insertion_durations;
+    int64_t curr_query_cnt = 0;
+    int64_t curr_insertion_cnt = 0;
     size_t hashed_output;
-    int num_reachable_queries = -1;
+    uint32_t num_reachable_queries = 0;
 };
 
 struct Setting {
@@ -54,6 +61,8 @@ struct Setting {
     uint32_t TIMEOUT_SEC = 1800;
     uint32_t OPERATION_SEED = 1223;
     uint32_t QUERY_SEED = 2334;
+    int64_t QUERY_TIMESTAMP = 0;
+
 
     uint32_t nodes = 0;
     uint32_t input_lines = 0;
@@ -61,10 +70,11 @@ struct Setting {
 
 
 struct Operation {
-    Operation(bool is_query_, pair <uint32_t, uint32_t> arguments_) :
-                is_query(is_query_), arguments(arguments_){}
+    Operation(bool is_query_, pair <uint32_t, uint32_t> arguments_, int64_t timestamp_) :
+                is_query(is_query_), arguments(arguments_), timestamp(timestamp_){}
     bool is_query;
     pair <uint32_t, uint32_t> arguments;
+    int64_t timestamp;
 };
 
 
@@ -165,30 +175,37 @@ public:
     }
     virtual ~Algorithms(){};
     virtual bool answer_query(uint32_t u, uint32_t v) = 0; 
-
     void run(const vector<Operation> operations){
+        logg.reset();
         uint32_t u, v;
         clock_t tStart = clock();
-        int queries_answered = 0, true_q = 0, num_insertions = 0;
         size_t c_out = 0;
+        int64_t query_time = 0;
+        int64_t insertion_time = 0;
+
         for (auto x : operations){
             u = x.arguments.first;
             v = x.arguments.second;
             if (x.is_query){
+                if (x.timestamp <= setting.QUERY_TIMESTAMP){
+                    cerr << "Warning: No queries should be at time " << setting.QUERY_TIMESTAMP << endl;
+                    cerr << u << " " << v << endl;
+                }
                 auto started = std::chrono::high_resolution_clock::now();
-                bool result = answer_query(u, v);   
-                logg.query_duration += (chrono::duration_cast<std::chrono::microseconds>
-                            (chrono::high_resolution_clock::now()-started).count());
-                queries_answered ++;          
-                true_q += (result == true); 
+                bool result = answer_query(u, v);  
+
+                query_time += chrono::duration_cast<std::chrono::nanoseconds>
+                            (chrono::high_resolution_clock::now()-started).count();
+                logg.num_reachable_queries += (result == true); 
+                logg.curr_query_cnt ++;
                 results.push_back(result);
             }
             else{
                 auto started = std::chrono::high_resolution_clock::now();
                 add_edge(u, v);
-                logg.insetion_duration += chrono::duration_cast<std::chrono::microseconds>
-                            (chrono::high_resolution_clock::now()-started).count();                
-                num_insertions++;
+                insertion_time += chrono::duration_cast<std::chrono::nanoseconds>
+                            (chrono::high_resolution_clock::now()-started).count();  
+                logg.curr_insertion_cnt ++;              
             }
             c_out++;
             if (c_out > PROGRESS_STAMP * operations.size() / 100){
@@ -197,7 +214,7 @@ public:
                     cerr << "Timeout!" << endl;
                     exit(0);
                 }
-                print_progress((double)(queries_answered+num_insertions)/operations.size());
+                print_progress((double)(logg.curr_query_cnt+logg.curr_insertion_cnt)/operations.size());
             }
         }
         cout << endl;
@@ -209,10 +226,9 @@ public:
         size_t hash_output = hash<vector<bool>>{}(results);
         // outfile << hash<vector<bool>>{}(results) << "\n";
         // outfile.close();
-        logg.num_queries = queries_answered;
-        logg.num_insertions = num_insertions;
+        logg.query_durations.push_back(query_time);
+        logg.insertion_durations.push_back(insertion_time);
         logg.hashed_output = hash_output;
-        logg.num_reachable_queries = true_q;
     }
 protected:
     const Setting& setting;
@@ -353,7 +369,6 @@ public:
     Sv(int count_, const Setting& setting_, Logger& logg_, uint32_t sv_seed_) : Algorithms(setting_, logg_), count(count_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
-        // generate_sv_list(sv_seed_);
         sv_seed = sv_seed_;
         sqrt_n = sqrt(setting.nodes);
     }
@@ -383,14 +398,12 @@ public:
                 return false;
             }
         }
+
         return calculate_bibfs(u, v);
     }
     bool answer_query (uint32_t u, uint32_t v){
-        if (insertions_sofar == sqrt_n){
-            generate_sv_list(sv_seed);
-            insertions_sofar++;
-        }
-        
+        if (!generated_sv)
+            generate_sv_list();
         return calculate_sv(u, v);                
     }
 private:
@@ -399,38 +412,39 @@ private:
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
     int count;
-    int insertions_sofar = 0, sqrt_n;
+    uint32_t sqrt_n;
     uint32_t sv_seed;
-    bool should_make_sv = false;
+    bool generated_sv = false;
     const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
-    void generate_sv_list(uint32_t sv_seed){
+    void generate_sv_list(){
         // random_device os_seed;
         engine generator(sv_seed);
         uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
         // uniform_int_distribution< u32 > distribute(0, svs.size() - 1);
-
         logg.algorithm += '{';
         int i = 0;
+        uint32_t seen_nodes = 0;
 
         while (i < count){
             uint32_t sv = distribute(generator);
             // uint32_t sv = svs[distribute(generator)];
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
-            if (is_isolate(sv))
+            seen_nodes ++;
+            if (seen_nodes < sqrt_n && is_isolate(sv))  //so that we will not keep searching for a node
                 continue;
+            seen_nodes = 0;
             // reachability_tree[sv] = new reachabilityTree(sv);
             reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv, setting.nodes, out_edge, in_edge)));
             // reachability_tree.push_back(make_unique<reachabilityTree>(sv));
-            
             logg.algorithm += to_string(sv) + ", ";
             i++;
         }
         logg.algorithm += '}';
-
+        generated_sv = true;
     }
     bool is_isolate(uint32_t u){
         return (out_edge[u].size() == 0 && in_edge[u].size() == 0);
@@ -443,8 +457,8 @@ private:
     void add_edge(uint32_t u, uint32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
-        update_sv(u, v);
-        insertions_sofar ++; //for testing
+        if (generated_sv)
+            update_sv(u, v);
     }
     bool calculate_bibfs(uint32_t u, uint32_t v){  
         bool found_path = false;
@@ -556,6 +570,13 @@ public:
                 }
                 setting.QUERY_SEED = stoi(argv[i+1]);
             }
+            if (!strcmp(argv[i], "-qt")){
+                if (strspn(argv[i+1], "-.0123456789" ) != strlen(argv[i+1])){
+                    cerr << "Wrong Input for Query Timestamp.\n";
+                    exit(0);
+                }
+                setting.QUERY_TIMESTAMP = -1;
+            }
             if (!strcmp(argv[i], "-inp")){
                 std::ifstream infile(argv[i+1]);
                 if (!infile.good()){
@@ -587,7 +608,7 @@ public:
                 setting.LOG_FILE = argv[i+1];
             }
         }
-        // read_meta_file();
+
         read_input_file(); //read and store input file in "input_file_operations"
         operations.reserve(setting.input_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
         generate_operations(); //add query operatios to "input_file_operations" and store result in "operations"
@@ -615,10 +636,11 @@ public:
             }
             else
                 assert(false);
-            auto started = std::chrono::high_resolution_clock::now();
+            // auto started = std::chrono::high_resolution_clock::now();
             alg->run(operations);
-            logg.run_duration.push_back(chrono::duration_cast<std::chrono::milliseconds>
-                            (chrono::high_resolution_clock::now()-started).count());
+            // logg.run_duration.push_back(chrono::duration_cast<std::chrono::milliseconds>
+            //                 (chrono::high_resolution_clock::now()-started).count());
+            logg.run_durations.push_back(logg.query_durations.back() + logg.insertion_durations.back());
         }
         
         set_time(logg.end_time);
@@ -629,21 +651,32 @@ public:
         log_file.open(setting.LOG_FILE, std::ios_base::app);
         log_file << "test id: " << logg.test_id << '\n' <<
                     "input file name: " << setting.INPUT_FILE << '\n' <<
+                    "input file lines: " << setting.input_lines << '\n' <<
                     "seed: " << setting.OPERATION_SEED << ", " << setting.QUERY_SEED << '\n' <<
                     "#run: " << setting.TEST_RUN_COUNT << '\n' << 
-                    "#queries: " << logg.num_queries << '\n' <<
-                    "#insertions: " << logg.num_insertions << '\n' <<
                     "algorithm: " << logg.algorithm << '\n' <<
+                    "#query opertions: " << logg.query_operations_cnt << '\n' <<
+                    "#insertion operations: " << logg.insertion_operations_cnt << '\n' <<
                     "start time: " << logg.start_time << '\n' <<
                     "end time: " << logg.end_time << '\n' <<
-                    "duration: " << std::accumulate(logg.run_duration.begin(),
-                                        logg.run_duration.end(), decltype(logg.run_duration)::
+                    "duration: " << std::accumulate(logg.run_durations.begin(),
+                                        logg.run_durations.end(), decltype(logg.run_durations)::
                                         value_type(0)) << "{";
-                    for (auto x : logg.run_duration)
+                    for (auto x : logg.run_durations)
                         log_file << x << " ";
                     log_file << '}' << '\n' <<
-                    "queries duration: " << logg.query_duration << '\n' <<
-                    "insertions duration: " << logg.insetion_duration << '\n' <<
+                    "queries: " << std::accumulate(logg.query_durations.begin(),
+                                        logg.query_durations.end(), decltype(logg.query_durations)::
+                                        value_type(0)) << "{";
+                    for (auto x : logg.query_durations)
+                        log_file << x << " ";
+                    log_file << '}' << '\n' <<
+                    "insertions: " << std::accumulate(logg.insertion_durations.begin(),
+                                        logg.insertion_durations.end(), decltype(logg.insertion_durations)::
+                                        value_type(0)) << "{";
+                    for (auto x : logg.insertion_durations)
+                        log_file << x << " ";
+                    log_file << '}' << '\n' <<
                     "hashed output: " << logg.hashed_output << '\n' <<
                     "#reachable queries: " << logg.num_reachable_queries << '\n' <<
                     string(50, '*') << "\n";
@@ -653,19 +686,8 @@ public:
 private:
     Setting setting;
     Logger logg;
-    // int input_num_lines = 0;
-    vector<pair<uint32_t, uint32_t>> input_file_operations;
+    vector<Operation> insertion_operations;
     vector<Operation> operations;
-
-    // void read_meta_file(){
-    //     ifstream infile(setting.META_FILE);
-    //     string command;
-    //     infile >> command >> setting.nodes;
-    //     infile >> command >> input_num_lines;
-    //     infile >> command >> setting.INPUT_FILE;
-    //     setting.nodes++; //because input file is zero-based
-    //     infile.close();
-    // }
 
     void convert_input(){
         ifstream file(setting.INPUT_FILE);
@@ -677,42 +699,38 @@ private:
         else{
             filesystem::create_directories("build");
         }
-        // std::cout << "filename and extension: " << p.filename() << std::endl; // "file.ext"
+
         ofstream new_file("build/" + string(p.filename()) , std::ios::trunc);
-        // ofstream meta_file("meta-sample.txt");
+
         uint32_t max_nodes = 0;
         uint32_t lines = 0;
-        // string i;
-        // while (getline(file, i)) {
+       
         uint32_t u, v;
         string type, timestamp;
         while (file >> u >> v >> type >> timestamp){
             
             max_nodes = max(max_nodes, max(u, v));
             if (type == "+1") {
-                new_file << u << " " << v << endl;
+                new_file << u << ' ' << v << ' ' << timestamp << endl;
                 lines++;
             }
         }
         setting.nodes = max_nodes + 1;
-        // meta_file << "nodes: " << m << endl;
-        setting.input_lines = lines; 
-        // meta_file << "lines: " << lines << endl;
-        // meta_file << "file_name: " << file_name;
+        setting.input_lines = lines;
+
         new_file.close();
-        // meta_file.close();
-        // rename("sample.txt", "MyImplementation/sample.txt");
-        // rename("meta-sample.txt", "MyImplementation/meta-sample.txt");
-        // return 0;
     }
     void read_input_file(){
-        convert_input();
+        convert_input(); 
         cout << "Input generated!" << endl;
+
         std::filesystem::path p(setting.INPUT_FILE);
         ifstream infile("build/" + string(p.filename()));
         uint32_t u, v;
-        while (infile >> u >> v){
-            input_file_operations.push_back(make_pair(u, v));
+        int timestamp;
+
+        while (infile >> u >> v >> timestamp){
+            insertion_operations.push_back(Operation(false, make_pair(u, v), timestamp));
         }
         infile.close();
     }
@@ -723,16 +741,20 @@ private:
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, setting.nodes-1);
         uint32_t u, v;
-        for (auto x : input_file_operations){
-            u = x.first;
-            v = x.second;
-            if (distribute(generator) < setting.QUERY_PERCENTAGE){
+        for (auto x : insertion_operations){
+            u = x.arguments.first;
+            v = x.arguments.second;
+            // currently each insertion and query have the same timestamp
+            // we can modify for different implementations later 
+            if (x.timestamp > setting.QUERY_TIMESTAMP && distribute(generator) < setting.QUERY_PERCENTAGE){
                 uint32_t u_q = query_chance_distribute(query_generator);
                 uint32_t v_q = query_chance_distribute(query_generator);
-                operations.push_back(Operation(true, make_pair(u_q, v_q)));
+                operations.push_back(Operation(true, make_pair(u_q, v_q), x.timestamp));
+                logg.query_operations_cnt ++;
             }
-            operations.push_back(Operation(false, make_pair(u, v)));
+            operations.push_back(Operation(false, make_pair(u, v), x.timestamp));
         }
+        logg.insertion_operations_cnt = insertion_operations.size();
     }
     int get_test_id(){ //can probably read backwards later to enhance speed
         string line;
@@ -752,7 +774,7 @@ int main(int argc, char* argv[]){
 
     Program program; 
     program.read_parse_input(argc, argv);
-    
+
     program.execute_test();
 
     program.write_to_log();
