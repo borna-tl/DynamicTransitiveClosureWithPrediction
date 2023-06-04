@@ -56,7 +56,7 @@ struct Setting {
     string LOG_FILE = "log.txt";
     
     string ALGORITHM = "sv_1";
-    uint32_t QUERY_PERCENTAGE = 50;
+    uint32_t QUERY_PERCENTAGE = 100;
     uint32_t TEST_RUN_COUNT = 10;
     uint32_t TIMEOUT_SEC = 1800;
     uint32_t OPERATION_SEED = 1223;
@@ -370,7 +370,8 @@ public:
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
         sv_seed = sv_seed_;
-        sqrt_n = sqrt(setting.nodes);
+        // We search 10% of the nodes, to find a non-isolated candidate for sv
+        sv_search_threshold = setting.nodes / 10; 
     }
     virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
@@ -402,8 +403,10 @@ public:
         return calculate_bibfs(u, v);
     }
     bool answer_query (uint32_t u, uint32_t v){
-        if (!generated_sv)
+        if (!generated_sv){
             generate_sv_list();
+            generated_sv = true;
+        }
         return calculate_sv(u, v);                
     }
 private:
@@ -412,7 +415,7 @@ private:
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
     int count;
-    uint32_t sqrt_n;
+    uint32_t sv_search_threshold;
     uint32_t sv_seed;
     bool generated_sv = false;
     const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
@@ -427,14 +430,13 @@ private:
         logg.algorithm += '{';
         int i = 0;
         uint32_t seen_nodes = 0;
-
         while (i < count){
             uint32_t sv = distribute(generator);
             // uint32_t sv = svs[distribute(generator)];
             if (find_sv(sv) != reachability_tree.end()) 
                 continue;
             seen_nodes ++;
-            if (seen_nodes < sqrt_n && is_isolate(sv))  //so that we will not keep searching for a node
+            if (seen_nodes < sv_search_threshold && is_isolate(sv))  //so that we will not keep searching for a node
                 continue;
             seen_nodes = 0;
             // reachability_tree[sv] = new reachabilityTree(sv);
@@ -444,10 +446,10 @@ private:
             i++;
         }
         logg.algorithm += '}';
-        generated_sv = true;
     }
     bool is_isolate(uint32_t u){
-        return (out_edge[u].size() == 0 && in_edge[u].size() == 0);
+        // return AND of clauses if dataset is likely to be sparse!
+        return (out_edge[u].size() == 0 || in_edge[u].size() == 0);
     }
     void update_sv(uint32_t u, uint32_t v){
         for (auto &rt : reachability_tree){
@@ -575,7 +577,7 @@ public:
                     cerr << "Wrong Input for Query Timestamp.\n";
                     exit(0);
                 }
-                setting.QUERY_TIMESTAMP = -1;
+                setting.QUERY_TIMESTAMP = stoi(argv[i+1]);
             }
             if (!strcmp(argv[i], "-inp")){
                 std::ifstream infile(argv[i+1]);
@@ -646,7 +648,16 @@ public:
         set_time(logg.end_time);
     }
 
+    int64_t sum (vector<int64_t> vec){
+        return std::accumulate(vec.begin(), vec.end(), decltype(vec)::value_type(0));
+    }
+
     void write_to_log(){
+        double ratio = 1;
+        int64_t duration = sum(logg.run_durations);
+        int64_t queries = sum(logg.query_durations);
+        int64_t insertions = sum(logg.insertion_durations);
+
         ofstream log_file;
         log_file.open(setting.LOG_FILE, std::ios_base::app);
         log_file << "test id: " << logg.test_id << '\n' <<
@@ -659,24 +670,24 @@ public:
                     "#insertion operations: " << logg.insertion_operations_cnt << '\n' <<
                     "start time: " << logg.start_time << '\n' <<
                     "end time: " << logg.end_time << '\n' <<
-                    "duration: " << std::accumulate(logg.run_durations.begin(),
-                                        logg.run_durations.end(), decltype(logg.run_durations)::
-                                        value_type(0)) << "{";
-                    for (auto x : logg.run_durations)
+                    "duration: " << duration << "{";
+                    for (auto x : logg.run_durations){
                         log_file << x << " ";
-                    log_file << '}' << '\n' <<
-                    "queries: " << std::accumulate(logg.query_durations.begin(),
-                                        logg.query_durations.end(), decltype(logg.query_durations)::
-                                        value_type(0)) << "{";
-                    for (auto x : logg.query_durations)
+                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
+                    }
+                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
+                    "queries: " << queries << "{";
+                    for (auto x : logg.query_durations){
                         log_file << x << " ";
-                    log_file << '}' << '\n' <<
-                    "insertions: " << std::accumulate(logg.insertion_durations.begin(),
-                                        logg.insertion_durations.end(), decltype(logg.insertion_durations)::
-                                        value_type(0)) << "{";
-                    for (auto x : logg.insertion_durations)
+                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
+                    }
+                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
+                    "insertions: " << insertions << "{";
+                    for (auto x : logg.insertion_durations){
                         log_file << x << " ";
-                    log_file << '}' << '\n' <<
+                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
+                    }
+                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
                     "hashed output: " << logg.hashed_output << '\n' <<
                     "#reachable queries: " << logg.num_reachable_queries << '\n' <<
                     string(50, '*') << "\n";
