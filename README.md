@@ -11,7 +11,7 @@ where *run_settings* has the following structure ```{flag} {arg}```
 | Flag  | Argument range                | Default         | Description                                  |
 | ----- | ----------------------------- | --------------- | -------------------------------              |
 | -alg  | {bfs, dfs, bibfs, sv_*k*}     | sv_1            | Choose your favorite algorithm.              |
-| -qp   | [0, 100]                      | 50              | Query Percentage                             |
+| -qp   | [0, 100]                      | 100             | Query Percentage                             |
 | -qt   | Any Int                       | 0               | Query Timestamp                              |
 | -trc  | Any Int                       | 10              | Test Run Count (#times to run the experiment)|
 | -ts   | Any Int                       | 1800            | Set time out in seconds                      |
@@ -51,4 +51,27 @@ After we have generated our initial graph, by *-qp* chance, there will be a
 query operation after each insertion. The query operations are generated randomly
 over all the vertices.
 
-<!-- add log description later-->
+## Log
+
+The generated log file has the following format:
+
+| Field                 | Value                                                               |
+| --------------------- | ------------------------------------------------------------------- |
+| test id               | number of the test                                                  |
+| input file name       | name of the input file                                              |
+| input file lines      | number of the input lines (initial graph + edge insertions)         |
+| seed                  | seeds used to generate operation queries                            |
+| #run                  | number of test runs                                                 |
+| algorithm             | algorithm used to answer queries                                    |
+| #query opertions      | number of query operations                                          |
+| #insertion operations | number of insertion operations                                      |
+| start time            | start time of the test execution                                    |
+| end time              | end time of the test execution                                      |
+| duration              | total duration of tests running time (nanoseconds)                  |
+| queries               | total duration of tests query time (shown also individually)        |
+| insertions            | total duration of tests insertion time (shown also individually)    |
+| hashed output         | test hashed output                                                  |
+| #reachable queries    | number of queries which were true                                   |
+
+> **Note**
+> If the algorithm is sv_*k*, the sv nodes (for each run) are also shown in the log.
