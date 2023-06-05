@@ -39,7 +39,7 @@ struct Logger {
     uint32_t insertion_operations_cnt = 0;
     string start_time;
     string end_time;
-    vector<int64_t> run_durations; //in mili-seconds
+    vector<int64_t> run_durations; //in milliseconds
     vector<int64_t> query_durations;
     vector<int64_t> insertion_durations;
     int64_t curr_query_cnt = 0;
@@ -86,7 +86,7 @@ public:
                         id(id_), max_nodes(max_nodes_){
         if (max_nodes == 0){
             //look for some better form of sending errors
-            cout << "Not expecting zero nodes" << endl;
+            cerr << "Not expecting zero nodes" << endl;
             exit(0);
         }
         r_plus.resize(max_nodes);
@@ -94,8 +94,6 @@ public:
         initialize(out_edge, r_plus);
         initialize(in_edge, r_minus);
 
-        // r_plus[id] = true;
-        // r_minus[id] = true;
     }
     ~reachabilityTree(){}
 
@@ -611,9 +609,9 @@ public:
             }
         }
 
-        read_input_file(); //read and store input file in "input_file_operations"
+        read_input_file(); //read dataset and build input
         operations.reserve(setting.input_lines * ((100 + setting.QUERY_PERCENTAGE) / 100));
-        generate_operations(); //add query operatios to "input_file_operations" and store result in "operations"
+        generate_operations(); //add query operatios to input and store result in "operations"
 
         logg.test_id = get_test_id();
         logg.algorithm = setting.ALGORITHM; 
@@ -629,19 +627,12 @@ public:
                 alg = unique_ptr<Algorithms>(new Bfs(setting, logg));
             else if (setting.ALGORITHM == "bibfs")
                 alg = unique_ptr<Algorithms>(new Bibfs(setting, logg));
-            // else if (setting.ALGORITHM == "sv_1")
-            //     alg = unique_ptr<Algorithms>(new Sv(1, setting, logg, i)); //random seed i for sv generation
-            // else if (setting.ALGORITHM == "sv_2")
-            //     alg = unique_ptr<Algorithms>(new Sv(2, setting, logg, i));
             else if (setting.ALGORITHM.substr(0, 3) == "sv_"){
                 alg = unique_ptr<Algorithms>(new Sv(stoi(setting.ALGORITHM.substr(3)), setting, logg, i));
             }
             else
                 assert(false);
-            // auto started = std::chrono::high_resolution_clock::now();
             alg->run(operations);
-            // logg.run_duration.push_back(chrono::duration_cast<std::chrono::milliseconds>
-            //                 (chrono::high_resolution_clock::now()-started).count());
             logg.run_durations.push_back(logg.query_durations.back() + logg.insertion_durations.back());
         }
         
@@ -705,7 +696,6 @@ private:
         std::filesystem::path p(setting.INPUT_FILE);
         if (filesystem::exists("build/" + string(p.filename()))){
             cout << "Directory already exists." << endl;
-            // return;
         }
         else{
             filesystem::create_directories("build");
@@ -746,7 +736,6 @@ private:
         infile.close();
     }
     void generate_operations (){
-        // random_device os_seed; //can use later for seeding engine.
         engine generator(setting.OPERATION_SEED);
         engine query_generator(setting.QUERY_SEED);
         uniform_int_distribution< u32 > distribute(0, 99);
