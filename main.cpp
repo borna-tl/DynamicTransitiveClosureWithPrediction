@@ -21,7 +21,8 @@ using engine = std::mt19937;
 //add std::
 //maybe use static inline?
 
-void print_progress(const double percentage) {
+
+void print_progress(double percentage) {
     int val = (int) (percentage * 100);
     int lpad = (int) (percentage * PBWIDTH);
     int rpad = PBWIDTH - lpad;
@@ -52,6 +53,7 @@ T sum (const std::vector<T> &vec){
     return std::accumulate(vec.begin(), vec.end(), 0.0);
 }
 
+
 struct Logger {
     void reset(){
         num_reachable_queries = 0;
@@ -72,6 +74,7 @@ struct Logger {
     size_t hashed_output;
     uint32_t num_reachable_queries = 0;
 };
+
 
 struct Setting {
 
@@ -95,8 +98,9 @@ struct Setting {
 
 
 struct Operation {
-    Operation(bool is_query_, pair <uint32_t, uint32_t> arguments_, int64_t timestamp_) :
-                is_query(is_query_), arguments(arguments_), timestamp(timestamp_){}
+    Operation(const bool is_query_, const pair <uint32_t, uint32_t> arguments_,
+                const int64_t timestamp_): is_query(is_query_), arguments(arguments_),
+                timestamp(timestamp_){}
     bool is_query;
     pair <uint32_t, uint32_t> arguments;
     int64_t timestamp;
@@ -105,7 +109,7 @@ struct Operation {
 
 class reachabilityTree{ //this is a simple incremental reachability tree for vertex s
 public:
-    reachabilityTree(uint32_t id_, uint32_t max_nodes_, 
+    reachabilityTree(const uint32_t id_, const uint32_t max_nodes_, 
                         const vector<vector<uint32_t>> &out_edge,
                         const vector<vector<uint32_t>> &in_edge):
                         id(id_), max_nodes(max_nodes_){
@@ -120,6 +124,7 @@ public:
         initialize(in_edge, r_minus);
 
     }
+    
     ~reachabilityTree(){}
 
     void initialize(const vector<vector<uint32_t>> &edge, vector<bool>& r){
@@ -131,7 +136,7 @@ public:
         while (pointer < q.size()) {
             u = q[pointer];
             pointer++;
-            for (uint32_t i : edge[u]){
+            for (const uint32_t i : edge[u]){
                 if (!r[i]){
                     r[i] = true;
                     q.push_back(i);
@@ -140,7 +145,10 @@ public:
         }
         
     }
-    void update(uint32_t u, uint32_t v, const vector<vector<uint32_t>> &out_edge, const vector<vector<uint32_t>> &in_edge){
+    
+    void update(const uint32_t u, const uint32_t v,
+                const vector<vector<uint32_t>> &out_edge,
+                const vector<vector<uint32_t>> &in_edge){
         update_reachability(u, v, out_edge, r_plus); //source reachability
         update_reachability(v, u, in_edge, r_minus); //sink reachability
     }
@@ -157,30 +165,37 @@ public:
                 cout << i << " ";
         cout << endl;
     }
-    bool reaches(uint32_t u){
+    
+    bool reaches(const uint32_t u){
         return r_plus[u];
     }
-    bool is_reachable_from(uint32_t u){
+    
+    bool is_reachable_from(const uint32_t u){
         return r_minus[u];
     }
-    uint32_t id; 
+    
+    const uint32_t id; 
 private:
     const uint32_t max_nodes; 
     vector <bool> r_plus;
     vector <bool> r_minus;
 
-    void update_reachability(uint32_t u, uint32_t v, const vector<vector<uint32_t>> &edge, vector<bool>& r){
+    void update_reachability(const uint32_t u, const uint32_t v,
+                                const vector<vector<uint32_t>> &edge, vector<bool>& r){
         if (r[v])
             return;
         if (!r[u])
             return;
+        
         queue<uint32_t> q;
-        r[v] = true;
-        q.push(v);
+        uint32_t curr_node = v;
+
+        r[curr_node] = true;
+        q.push(curr_node);
         while (!q.empty()) {
-            v = q.front();
+            curr_node = q.front();
             q.pop();
-            for (auto i : edge[v]){
+            for (const auto i : edge[curr_node]){
                 if (!r[i]){
                     r[i] = true;
                     q.push(i);
@@ -196,8 +211,11 @@ public:
         out_edge.assign(setting.nodes, vector<uint32_t>());
         in_edge.assign(setting.nodes, vector<uint32_t>());
     }
+    
     virtual ~Algorithms(){};
-    virtual bool answer_query(uint32_t u, uint32_t v) = 0; 
+    
+    virtual bool answer_query(const uint32_t u, const uint32_t v) = 0; 
+    
     void run(const vector<Operation> operations){
         logg.reset();
         uint32_t u, v;
@@ -206,7 +224,7 @@ public:
         int64_t query_time = 0;
         int64_t insertion_time = 0;
 
-        for (auto x : operations){
+        for (const auto &x : operations){
             u = x.arguments.first;
             v = x.arguments.second;
             if (x.is_query){
@@ -253,13 +271,15 @@ public:
         logg.insertion_durations.push_back(insertion_time / 1e9);
         logg.hashed_output = hash_output;
     }
+
 protected:
     const Setting& setting;
     Logger& logg;
     vector<vector<uint32_t>> out_edge;
     vector<vector<uint32_t>> in_edge;
     vector <bool> results;
-    virtual void add_edge(uint32_t u, uint32_t v){
+    
+    virtual void add_edge(const uint32_t u, const uint32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
     }
@@ -273,15 +293,17 @@ public:
     Bfs(const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_){
         visited_bfs.resize(setting.nodes, false);
     }
-    bool calculate_bfs(uint32_t u, uint32_t v){  
+    
+    bool calculate_bfs(const uint32_t u, const uint32_t v){  
         vector<uint32_t> q;
         size_t pointer = 0;
-        visited_bfs[u] = true;
-        q.push_back(u); 
+        uint32_t curr_node = u;
+        visited_bfs[curr_node] = true;
+        q.push_back(curr_node); 
         while (pointer < q.size()) {
-            u = q[pointer];
+            curr_node = q[pointer];
             pointer++;
-            for (uint32_t i : out_edge[u]){
+            for (const uint32_t i : out_edge[curr_node]){
                 if (!visited_bfs[i]){
                     visited_bfs[i] = true;
                     q.push_back(i);
@@ -289,12 +311,13 @@ public:
             }
         }
         bool ans = visited_bfs[v];
-        for (uint32_t i : q){
+        for (const uint32_t i : q){
             visited_bfs[i] = false;
         }
         return ans;
     }
-    bool answer_query(uint32_t u, uint32_t v){
+    
+    bool answer_query(const uint32_t u, const uint32_t v){
         return calculate_bfs(u, v);                
     }
 private:
@@ -307,19 +330,20 @@ public:
     Dfs(const Setting& setting_, Logger& logg_) : Algorithms(setting_, logg_){
         visited_dfs.resize(setting.nodes, false);
     }
-    bool calculate_dfs(uint32_t u, uint32_t v){ 
+
+    bool calculate_dfs(const uint32_t u, const uint32_t v){ 
         visited_dfs[u] = true;
         if (visited_dfs[v]){
             return true;
         }
-        for (auto i : out_edge[u]){
+        for (const auto i : out_edge[u]){
             if (!(visited_dfs[i])){
                 calculate_dfs(i, v);
             }
         }
         return visited_dfs[v];
     }
-    bool answer_query(uint32_t u, uint32_t v){       
+    bool answer_query(const uint32_t u, const uint32_t v){       
         visited_dfs.assign(visited_dfs.size(), false);
         return calculate_dfs(u, v);
     }
@@ -334,14 +358,16 @@ public:
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
     }
-    bool answer_query(uint32_t u, uint32_t v){
+    bool answer_query(const uint32_t u, const uint32_t v){
         return calculate_bibfs(u, v);                
     }
 private:
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
-    bool calculate_bibfs(uint32_t u, uint32_t v){  
+    
+    bool calculate_bibfs(const uint32_t u, const uint32_t v){  
         bool found_path = false;
+        uint32_t curr_node;
         vector<uint32_t> source_queue, sink_queue;
         size_t source_pointer = 0;
         size_t sink_pointer = 0;
@@ -352,9 +378,9 @@ private:
         while (!found_path && source_pointer < source_queue.size()
                             && sink_pointer < sink_queue.size()) {
             //running bfs for the source queue one time
-            u = source_queue[source_pointer];
+            curr_node = source_queue[source_pointer];
             source_pointer++;
-            for (auto i : out_edge[u]){
+            for (const auto i : out_edge[curr_node]){
                 if (!visited_bibfs_source[i]){
                     visited_bibfs_source[i] = true;
                     source_queue.push_back(i);
@@ -364,9 +390,9 @@ private:
                 }
             }
             //running bfs for the back queue one time
-            v = sink_queue[sink_pointer];
+            curr_node = sink_queue[sink_pointer];
             sink_pointer++;
-            for (auto i : in_edge[v]){
+            for (const auto i : in_edge[curr_node]){
                 if (!visited_bibfs_sink[i]){
                     visited_bibfs_sink[i] = true;
                     sink_queue.push_back(i);
@@ -376,10 +402,10 @@ private:
                 }
             }
         }
-        for (uint32_t i : source_queue){
+        for (const uint32_t i : source_queue){
             visited_bibfs_source[i] = false;
         }
-        for (uint32_t i : sink_queue){
+        for (const uint32_t i : sink_queue){
             visited_bibfs_sink[i] = false;
         }
         return found_path;
@@ -395,7 +421,8 @@ public:
         sv_seed = sv_seed_;
     }
     virtual ~Sv(){}
-    bool calculate_sv(uint32_t u, uint32_t v){  
+    
+    bool calculate_sv(const uint32_t u, const uint32_t v){  
         // instead of searching, we can use hash map as well.
         // since |sv| is little, i guess it's better to simply search
         auto it = find_sv(u);
@@ -406,7 +433,7 @@ public:
         if (it != reachability_tree.end()){
             return (*it)->is_reachable_from(u);
         }
-        for (auto &rt: reachability_tree){
+        for (const auto &rt: reachability_tree){
             //obs. 1
             if (rt->is_reachable_from(u) && rt->reaches(v)){
                 return true;
@@ -423,7 +450,7 @@ public:
         
         return calculate_bibfs(u, v);
     }
-    bool answer_query (uint32_t u, uint32_t v){
+    bool answer_query (const uint32_t u, const uint32_t v){
         if (!generated_sv){
             generate_sv_list();
             generated_sv = true;
@@ -438,10 +465,12 @@ private:
     size_t count;
     uint32_t sv_seed;
     bool generated_sv = false;
+    
     const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
+
     void generate_candidate_svs(vector<uint32_t>& non_isolated_svs, vector<uint32_t>& half_isolated_svs){
         for (size_t i = 0; i < setting.nodes; i++){
             if (is_non_isolate(i))
@@ -450,6 +479,7 @@ private:
                 half_isolated_svs.push_back(i);
         }
     }
+
     void generate_sv_list(){
         // random_device os_seed;
         engine generator(sv_seed);
@@ -489,25 +519,31 @@ private:
         }
         logg.algorithm += '}';
     }
-    bool is_non_isolate(uint32_t u){
+
+    bool is_non_isolate(const uint32_t u){
         return (out_edge[u].size() != 0 && in_edge[u].size() != 0);
     }
-    bool is_half_isolate(uint32_t u){
+
+    bool is_half_isolate(const uint32_t u){
         return (out_edge[u].size() != 0 || in_edge[u].size() != 0);
     }
-    void update_sv(uint32_t u, uint32_t v){
-        for (auto &rt : reachability_tree){
+    
+    void update_sv(const uint32_t u, const uint32_t v){
+        for (const auto &rt : reachability_tree){
             rt->update(u, v, out_edge, in_edge);
         }
     }
-    void add_edge(uint32_t u, uint32_t v){
+
+    void add_edge(const uint32_t u, const uint32_t v){
         out_edge[u].push_back(v);
         in_edge[v].push_back(u);
         if (generated_sv)
             update_sv(u, v);
     }
-    bool calculate_bibfs(uint32_t u, uint32_t v){  
+
+    bool calculate_bibfs(const uint32_t u, const uint32_t v){  
         bool found_path = false;
+        uint32_t curr_node;
         vector<uint32_t> source_queue, sink_queue;
         size_t source_pointer = 0;
         size_t sink_pointer = 0;
@@ -518,9 +554,9 @@ private:
         while (!found_path && source_pointer < source_queue.size()
                             && sink_pointer < sink_queue.size()) {
             //running bfs for the source queue one time
-            u = source_queue[source_pointer];
+            curr_node = source_queue[source_pointer];
             source_pointer++;
-            for (auto i : out_edge[u]){
+            for (const auto i : out_edge[curr_node]){
                 if (!visited_bibfs_source[i]){
                     visited_bibfs_source[i] = true;
                     source_queue.push_back(i);
@@ -530,9 +566,9 @@ private:
                 }
             }
             //running bfs for the back queue one time
-            v = sink_queue[sink_pointer];
+            curr_node = sink_queue[sink_pointer];
             sink_pointer++;
-            for (auto i : in_edge[v]){
+            for (const auto i : in_edge[curr_node]){
                 if (!visited_bibfs_sink[i]){
                     visited_bibfs_sink[i] = true;
                     sink_queue.push_back(i);
@@ -542,10 +578,10 @@ private:
                 }
             }
         }
-        for (uint32_t i : source_queue){
+        for (const uint32_t i : source_queue){
             visited_bibfs_source[i] = false;
         }
-        for (uint32_t i : sink_queue){
+        for (const uint32_t i : sink_queue){
             visited_bibfs_sink[i] = false;
         }
         return found_path;
@@ -570,7 +606,8 @@ void set_time(string& t){
 class Program{
 public:
     Program(){}
-    void read_parse_input(int argc, char* argv[]){
+    
+    void read_parse_input(const int argc, const char* argv[]){
         for (int i = 1; i < argc; i += 2){
             if (!strcmp(argv[i], "-alg")){
                 if (strcmp(argv[i+1], "dfs") && strcmp(argv[i+1], "bfs") && 
@@ -704,17 +741,17 @@ public:
                     "start time: " << logg.start_time << '\n' <<
                     "end time: " << logg.end_time << '\n' <<
                     "duration: " << duration << "{";
-                    for (auto x : logg.run_durations){
+                    for (const auto x : logg.run_durations){
                         log_file << x << " ";
                     }
                     log_file << '}' << ' ' << '[' << variance(logg.run_durations) << ']' << '\n' <<
                     "queries: " << queries << "{";
-                    for (auto x : logg.query_durations){
+                    for (const auto x : logg.query_durations){
                         log_file << x << " ";
                     }
                     log_file << '}' << ' ' << '[' << variance(logg.query_durations) << ']' << '\n' <<
                     "insertions: " << insertions << "{";
-                    for (auto x : logg.insertion_durations){
+                    for (const auto x : logg.insertion_durations){
                         log_file << x << " ";
                     }
                     log_file << '}' << ' ' << '[' << variance(logg.insertion_durations) << ']' << '\n' <<
@@ -780,7 +817,7 @@ private:
         uniform_int_distribution< u32 > distribute(0, 99);
         uniform_int_distribution< u32 > query_chance_distribute(0, setting.nodes-1);
         uint32_t u, v;
-        for (auto x : insertion_operations){
+        for (const auto &x : insertion_operations){
             u = x.arguments.first;
             v = x.arguments.second;
             // currently each insertion and query have the same timestamp
@@ -809,7 +846,7 @@ private:
 
 };
 
-int main(int argc, char* argv[]){
+int main(int argc, const char* argv[]){
 
     Program program; 
     program.read_parse_input(argc, argv);
