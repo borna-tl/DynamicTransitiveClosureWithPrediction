@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <algorithm>
 
+
 using namespace std;
 using u32    = uint_least32_t;
 using engine = std::mt19937;
@@ -15,7 +16,12 @@ using engine = std::mt19937;
 #define PBSTR "++++++++++++++++++++++++++++++++++++++++++++++++++"
 #define PBWIDTH 50
 
-void print_progress(double percentage) {
+
+//add const where applicable
+//add std::
+//maybe use static inline?
+
+void print_progress(const double percentage) {
     int val = (int) (percentage * 100);
     int lpad = (int) (percentage * PBWIDTH);
     int rpad = PBWIDTH - lpad;
@@ -45,10 +51,6 @@ template<typename T>
 T sum (const std::vector<T> &vec){
     return std::accumulate(vec.begin(), vec.end(), 0.0);
 }
-
-//add const where applicable
-//add std::
-//maybe use static inline?
 
 struct Logger {
     void reset(){
@@ -387,12 +389,10 @@ private:
 class Sv : public Algorithms{
 
 public:
-    Sv(int count_, const Setting& setting_, Logger& logg_, uint32_t sv_seed_) : Algorithms(setting_, logg_), count(count_){
+    Sv(size_t count_, const Setting& setting_, Logger& logg_, uint32_t sv_seed_) : Algorithms(setting_, logg_), count(count_){
         visited_bibfs_source.resize(setting.nodes, false);
         visited_bibfs_sink.resize(setting.nodes, false);
         sv_seed = sv_seed_;
-        // We search 10% of the nodes, to find a non-isolated candidate for sv
-        sv_search_threshold = setting.nodes / 10; 
     }
     virtual ~Sv(){}
     bool calculate_sv(uint32_t u, uint32_t v){  
@@ -420,7 +420,7 @@ public:
                 return false;
             }
         }
-
+        
         return calculate_bibfs(u, v);
     }
     bool answer_query (uint32_t u, uint32_t v){
@@ -435,31 +435,52 @@ private:
     //bringing bibfs fallback algorithm inside sv (because we need the same graph out/in edges)
     vector<bool> visited_bibfs_source;
     vector<bool> visited_bibfs_sink;
-    int count;
-    uint32_t sv_search_threshold;
+    size_t count;
     uint32_t sv_seed;
     bool generated_sv = false;
     const vector<unique_ptr<reachabilityTree>>::iterator find_sv(uint32_t sv){
         return find_if(reachability_tree.begin(), reachability_tree.end(),
                         [&sv](const unique_ptr<reachabilityTree>& obj) {return (*obj).id == sv;});
     }
+    void generate_candidate_svs(vector<uint32_t>& non_isolated_svs, vector<uint32_t>& half_isolated_svs){
+        for (size_t i = 0; i < setting.nodes; i++){
+            if (is_non_isolate(i))
+                non_isolated_svs.push_back(i);
+            else if (is_half_isolate(i))
+                half_isolated_svs.push_back(i);
+        }
+    }
     void generate_sv_list(){
         // random_device os_seed;
         engine generator(sv_seed);
-        uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
-        // uniform_int_distribution< u32 > distribute(0, svs.size() - 1);
+        vector <uint32_t> non_isolated_svs, half_isolated_svs;
+        generate_candidate_svs(non_isolated_svs, half_isolated_svs); 
+
+        size_t i = 0;
         logg.algorithm += '{';
-        int i = 0;
-        uint32_t seen_nodes = 0;
         while (i < count){
-            uint32_t sv = distribute(generator);
-            // uint32_t sv = svs[distribute(generator)];
-            if (find_sv(sv) != reachability_tree.end()) 
+            uint32_t sv = 0;
+
+            if (non_isolated_svs.size() > 0){
+                uniform_int_distribution< u32 > non_distribute(0, non_isolated_svs.size() - 1);
+                size_t index = non_distribute(generator);
+                sv = non_isolated_svs[index];
+                non_isolated_svs.erase(non_isolated_svs.begin() + index);
+            }
+            else if (half_isolated_svs.size() > 0){
+                uniform_int_distribution< u32 > half_distribute(0, half_isolated_svs.size() - 1);
+                size_t index = half_distribute(generator);
+                sv = half_isolated_svs[index];
+                half_isolated_svs.erase(half_isolated_svs.begin() + index);
+            }
+            else{
+                uniform_int_distribution< u32 > distribute(0, setting.nodes - 1);
+                sv = distribute(generator);
+            }
+
+            if (find_sv(sv) != reachability_tree.end()) {
                 continue;
-            seen_nodes ++;
-            if (seen_nodes < sv_search_threshold && is_isolate(sv))  //so that we will not keep searching for a node
-                continue;
-            seen_nodes = 0;
+            }
             // reachability_tree[sv] = new reachabilityTree(sv);
             reachability_tree.push_back(unique_ptr<reachabilityTree>(new reachabilityTree(sv, setting.nodes, out_edge, in_edge)));
             // reachability_tree.push_back(make_unique<reachabilityTree>(sv));
@@ -468,9 +489,11 @@ private:
         }
         logg.algorithm += '}';
     }
-    bool is_isolate(uint32_t u){
-        // return AND of clauses if dataset is likely to be sparse!
-        return (out_edge[u].size() == 0 || in_edge[u].size() == 0);
+    bool is_non_isolate(uint32_t u){
+        return (out_edge[u].size() != 0 && in_edge[u].size() != 0);
+    }
+    bool is_half_isolate(uint32_t u){
+        return (out_edge[u].size() != 0 || in_edge[u].size() != 0);
     }
     void update_sv(uint32_t u, uint32_t v){
         for (auto &rt : reachability_tree){
