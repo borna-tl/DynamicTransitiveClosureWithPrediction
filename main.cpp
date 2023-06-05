@@ -23,6 +23,29 @@ void print_progress(double percentage) {
     fflush(stdout);
 }
 
+template<typename T>
+T variance(const std::vector<T> &vec) {
+    const size_t sz = vec.size();
+    if (sz <= 1) {
+        return 0.0;
+    }
+
+    // Calculate the mean
+    const T mean = std::accumulate(vec.begin(), vec.end(), 0.0) / sz;
+
+    // Now calculate the variance
+    auto variance_func = [&mean, &sz](T accumulator, const T& val) {
+        return accumulator + ((val - mean)*(val - mean) / (sz - 1));
+    };
+
+    return std::accumulate(vec.begin(), vec.end(), 0.0, variance_func);
+}
+
+template<typename T>
+T sum (const std::vector<T> &vec){
+    return std::accumulate(vec.begin(), vec.end(), 0.0);
+}
+
 //add const where applicable
 //add std::
 //maybe use static inline?
@@ -39,9 +62,9 @@ struct Logger {
     uint32_t insertion_operations_cnt = 0;
     string start_time;
     string end_time;
-    vector<int64_t> run_durations; //in milliseconds
-    vector<int64_t> query_durations;
-    vector<int64_t> insertion_durations;
+    vector<double_t> run_durations; //in milliseconds
+    vector<double_t> query_durations;
+    vector<double_t> insertion_durations;
     int64_t curr_query_cnt = 0;
     int64_t curr_insertion_cnt = 0;
     size_t hashed_output;
@@ -224,8 +247,8 @@ public:
         size_t hash_output = hash<vector<bool>>{}(results);
         // outfile << hash<vector<bool>>{}(results) << "\n";
         // outfile.close();
-        logg.query_durations.push_back(query_time);
-        logg.insertion_durations.push_back(insertion_time);
+        logg.query_durations.push_back(query_time / 1e9);
+        logg.insertion_durations.push_back(insertion_time / 1e9);
         logg.hashed_output = hash_output;
     }
 protected:
@@ -639,16 +662,12 @@ public:
         set_time(logg.end_time);
     }
 
-    int64_t sum (vector<int64_t> vec){
-        return std::accumulate(vec.begin(), vec.end(), decltype(vec)::value_type(0));
-    }
 
     void write_to_log(){
-        double ratio = 1;
-        int64_t duration = sum(logg.run_durations);
-        int64_t queries = sum(logg.query_durations);
-        int64_t insertions = sum(logg.insertion_durations);
-
+        double_t duration = sum(logg.run_durations);
+        double_t queries = sum(logg.query_durations);
+        double_t insertions = sum(logg.insertion_durations);
+        
         ofstream log_file;
         log_file.open(setting.LOG_FILE, std::ios_base::app);
         log_file << "test id: " << logg.test_id << '\n' <<
@@ -664,21 +683,18 @@ public:
                     "duration: " << duration << "{";
                     for (auto x : logg.run_durations){
                         log_file << x << " ";
-                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
                     }
-                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
+                    log_file << '}' << ' ' << '[' << variance(logg.run_durations) << ']' << '\n' <<
                     "queries: " << queries << "{";
                     for (auto x : logg.query_durations){
                         log_file << x << " ";
-                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
                     }
-                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
+                    log_file << '}' << ' ' << '[' << variance(logg.query_durations) << ']' << '\n' <<
                     "insertions: " << insertions << "{";
                     for (auto x : logg.insertion_durations){
                         log_file << x << " ";
-                        ratio = max(ratio, (double)x / (duration / setting.TEST_RUN_COUNT));
                     }
-                    log_file << '}' << ' ' << '[' << ratio << ']' << '\n' <<
+                    log_file << '}' << ' ' << '[' << variance(logg.insertion_durations) << ']' << '\n' <<
                     "hashed output: " << logg.hashed_output << '\n' <<
                     "#reachable queries: " << logg.num_reachable_queries << '\n' <<
                     string(50, '*') << "\n";
