@@ -10,6 +10,9 @@ using namespace std;
 using u32 = uint_least32_t;
 using engine = std::mt19937;
 
+typedef pair <uint32_t, uint32_t> ui_pair;
+
+#define INF 0x3f3f3f3f
 #define PROGRESS_STAMP 10 // define the progress bar count
 #define PBSTR "++++++++++++++++++++++++++++++++++++++++++++++++++"
 #define PBWIDTH 50
@@ -47,6 +50,27 @@ template <typename T>
 T sum(const std::vector<T> &vec) {
 	return std::accumulate(vec.begin(), vec.end(), 0.0);
 }
+
+template <class T, size_t W, size_t H>
+class Array2D {
+public:
+    const size_t width = W;
+    const size_t height = H;
+    // typedef typename T type;
+
+    Array2D() : buffer(width*height){}
+
+    inline T& at(unsigned int x, unsigned int y) {
+        return buffer[y * width + x];
+    }
+
+    inline const T& at(unsigned int x, unsigned int y) const {
+        return buffer[y * width + x];
+    }
+
+private:
+    std::vector<T> buffer;
+};
 
 struct Logger {
 	void reset() {
@@ -90,11 +114,11 @@ struct Setting {
 
 struct Operation {
 	Operation(const bool is_query_, const pair<uint32_t, uint32_t> arguments_,
-			  const int64_t timestamp_)
+			  const uint32_t timestamp_)
 		: is_query(is_query_), arguments(arguments_), timestamp(timestamp_) {}
 	bool is_query;
 	pair<uint32_t, uint32_t> arguments;
-	int64_t timestamp;
+	uint32_t timestamp;
 };
 
 class reachabilityTree { // this is a simple incremental reachability tree for vertex s
@@ -605,7 +629,9 @@ void set_time(string &t) {
 class Program {
 public:
 	Program() {}
-
+	~Program(){
+		// delete[] insertion_time; //return and dynamic pointer later
+	}
 	void read_parse_input(const int argc, const char *argv[]) {
 		for (int i = 1; i < argc; i += 2) {
 			if (!strcmp(argv[i], "-alg")) {
@@ -766,6 +792,18 @@ public:
 				 << "#reachable queries: " << logg.num_reachable_queries << '\n'
 				 << string(50, '*') << "\n";
 	}
+	void calculate_d(){
+		insertion_time = new list<ui_pair> [setting.nodes];
+		bottle_neck.assign(setting.nodes, vector<uint32_t>());
+		cout << insertion_time->size() << endl;
+		set_t();
+		for (size_t i = 0; i < setting.nodes; i++){
+			store_shortest_path(i);
+
+		}
+		delete[] insertion_time; //return and dynamic pointer later
+
+	}
 
 private:
 	Setting setting;
@@ -773,8 +811,13 @@ private:
 	vector<Operation> insertion_operations;
 	vector<Operation> operations;
 
-	void convert_input() {
+	// Array2D <uint32_t, 3000, 3000> T;
+	list<ui_pair>* insertion_time;
+	vector<vector<uint32_t>> bottle_neck;
 
+
+	void convert_input() {
+		
 		ifstream file(setting.INPUT_FILE);
 		std::filesystem::path p(setting.INPUT_FILE);
 
@@ -811,8 +854,7 @@ private:
 
 		std::filesystem::path p(setting.INPUT_FILE);
 		ifstream infile("build/" + string(p.filename()));
-		uint32_t u, v;
-		int timestamp;
+		uint32_t u, v, timestamp;
 
 		while (infile >> u >> v >> timestamp) {
 			insertion_operations.push_back(
@@ -820,6 +862,70 @@ private:
 		}
 		infile.close();
 	}
+
+	// Prints shortest paths from src to all other vertices
+	void store_shortest_path (uint32_t src) {
+		// Create a priority queue to store vertices that
+		// are being preprocessed. This is weird syntax in C++.
+		// Refer below link for details of this syntax
+		// https://www.geeksforgeeks.org/implement-min-heap-using-stl/
+		priority_queue< ui_pair, vector <ui_pair> , greater<ui_pair> > pq;
+
+		// Create a vector for distances and initialize all
+		// distances as infinite (INF)
+		// vector<uint32_t> dist(setting.nodes, INF);
+		bottle_neck[src].assign(setting.nodes, INF);
+		// Insert source itself in priority queue and initialize
+		// its distance as 0.
+		pq.push(make_pair(0, src));
+		bottle_neck[src][src] = 0;
+		
+		vector<bool> f(setting.nodes, false);
+
+		/* Looping till priority queue becomes empty (or all
+		distances are not finalized) */
+		while (!pq.empty()) {
+			// The first vertex in pair is the minimum distance
+			// vertex, extract it from priority queue.
+			// vertex label is stored in second of pair (it
+			// has to be done this way to keep the vertices
+			// sorted distance (distance must be first item
+			// in pair)
+			uint32_t u = pq.top().second;
+			pq.pop();
+			f[u] = true;
+
+			// 'i' is used to get all adjacent vertices of a vertex
+			list< ui_pair >::iterator i;
+			for (i = insertion_time[u].begin(); i != insertion_time[u].end(); ++i) {
+				// Get vertex label and weight of current adjacent
+				// of u.
+				uint32_t v = (*i).first;
+				uint32_t timestamp = (*i).second;
+
+				// If there is shorted path to v through u.
+				if (f[v] == false && bottle_neck[src][v] > max(bottle_neck[src][u], timestamp)) {
+					// Updating distance of v
+					bottle_neck[src][v] = max(bottle_neck[src][u], timestamp);
+					pq.push(make_pair(bottle_neck[src][v], v));
+				}
+			}
+		}
+
+		// Print shortest distances stored in dist[]
+		printf("Vertex Distance from Source: %d\n", src);
+		for (size_t i = 0; i < setting.nodes; ++i)
+			printf("%ld \t\t %d\n", i, bottle_neck[src][i]);
+	}
+	void set_t(){
+		uint32_t u, v;
+		for (const auto &x: insertion_operations){
+			u = x.arguments.first;
+			v = x.arguments.second;
+			insertion_time[u].push_back(make_pair(v, x.timestamp));
+		}
+	}
+	
 	void generate_operations() {
 		engine generator(setting.OPERATION_SEED);
 		engine query_generator(setting.QUERY_SEED);
@@ -860,7 +966,9 @@ int main(int argc, const char *argv[]) {
 	Program program;
 	program.read_parse_input(argc, argv);
 
-	program.execute_test();
+	program.calculate_d();
+	// program.execute_test();
 
-	program.write_to_log();
+	// program.write_to_log();
+	
 }
