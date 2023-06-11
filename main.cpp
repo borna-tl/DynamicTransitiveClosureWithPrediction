@@ -205,7 +205,7 @@ private:
 		while (!q.empty()) {
 			curr_node = q.front();
 			q.pop();
-			for (const auto i : edge[curr_node]) {
+			for (const auto& i : edge[curr_node]) {
 				if (!r[i]) {
 					r[i] = true;
 					q.push(i);
@@ -242,6 +242,7 @@ public:
 				if (x.timestamp <= setting.QUERY_TIMESTAMP) {
 					cerr << "Warning: No queries should be at time "
 						 << setting.QUERY_TIMESTAMP << endl;
+					// exit(0);
 					cerr << u << " " << v << endl;
 				}
 				auto started = std::chrono::high_resolution_clock::now();
@@ -351,7 +352,7 @@ public:
 		if (visited_dfs[v]) {
 			return true;
 		}
-		for (const auto i : out_edge[u]) {
+		for (const auto& i : out_edge[u]) {
 			if (!(visited_dfs[i])) {
 				calculate_dfs(i, v);
 			}
@@ -397,7 +398,7 @@ private:
 			// running bfs for the source queue one time
 			curr_node = source_queue[source_pointer];
 			source_pointer++;
-			for (const auto i : out_edge[curr_node]) {
+			for (const auto& i : out_edge[curr_node]) {
 				if (!visited_bibfs_source[i]) {
 					visited_bibfs_source[i] = true;
 					source_queue.push_back(i);
@@ -409,7 +410,7 @@ private:
 			// running bfs for the back queue one time
 			curr_node = sink_queue[sink_pointer];
 			sink_pointer++;
-			for (const auto i : in_edge[curr_node]) {
+			for (const auto& i : in_edge[curr_node]) {
 				if (!visited_bibfs_sink[i]) {
 					visited_bibfs_sink[i] = true;
 					sink_queue.push_back(i);
@@ -582,7 +583,7 @@ private:
 			// running bfs for the source queue one time
 			curr_node = source_queue[source_pointer];
 			source_pointer++;
-			for (const auto i : out_edge[curr_node]) {
+			for (const auto& i : out_edge[curr_node]) {
 				if (!visited_bibfs_source[i]) {
 					visited_bibfs_source[i] = true;
 					source_queue.push_back(i);
@@ -594,7 +595,7 @@ private:
 			// running bfs for the back queue one time
 			curr_node = sink_queue[sink_pointer];
 			sink_pointer++;
-			for (const auto i : in_edge[curr_node]) {
+			for (const auto& i : in_edge[curr_node]) {
 				if (!visited_bibfs_sink[i]) {
 					visited_bibfs_sink[i] = true;
 					sink_queue.push_back(i);
@@ -721,9 +722,9 @@ public:
 		read_input_file(); // read dataset and build input
 		operations.reserve(setting.input_lines *
 						   ((100 + setting.QUERY_PERCENTAGE) / 100));
-		generate_operations(); // add query operatios to input and store result in
+		generate_operations(insertion_operations, operations); // add query operatios to input and store result in
 							   // "operations"
-
+		cout << "done read parse input " << endl;
 		logg.test_id = get_test_id();
 		logg.algorithm = setting.ALGORITHM;
 	}
@@ -772,18 +773,18 @@ public:
 				 << "start time: " << logg.start_time << '\n'
 				 << "end time: " << logg.end_time << '\n'
 				 << "duration: " << duration << "{";
-		for (const auto x : logg.run_durations) {
+		for (const auto& x : logg.run_durations) {
 			log_file << x << " ";
 		}
 		log_file << '}' << ' ' << '[' << variance(logg.run_durations) << ']' << '\n'
 				 << "queries: " << queries << "{";
-		for (const auto x : logg.query_durations) {
+		for (const auto& x : logg.query_durations) {
 			log_file << x << " ";
 		}
 		log_file << '}' << ' ' << '[' << variance(logg.query_durations) << ']'
 				 << '\n'
 				 << "insertions: " << insertions << "{";
-		for (const auto x : logg.insertion_durations) {
+		for (const auto& x : logg.insertion_durations) {
 			log_file << x << " ";
 		}
 		log_file << '}' << ' ' << '[' << variance(logg.insertion_durations) << ']'
@@ -795,21 +796,35 @@ public:
 	void calculate_d(){
 		insertion_time = new list<ui_pair> [setting.nodes];
 		bottle_neck.assign(setting.nodes, vector<uint32_t>());
-		cout << insertion_time->size() << endl;
 		set_t();
 		for (size_t i = 0; i < setting.nodes; i++){
 			store_shortest_path(i);
-
+			cout << "calculated dijkstra " << i << endl;
 		}
+		cout << "done dijkstra" << endl;
 		delete[] insertion_time; //return and dynamic pointer later
-
+		permute_insertions();
+		cout << "done permute" << endl;
+		generate_operations(insertion_operations_permuted, operations_permuted);
+		// for (size_t i = 0; i < insertion_operations.size(); i++){
+		// 	cout << operations[i].is_query << "|" << operations[i].arguments.first << " " <<
+		// 	operations[i].arguments.second << " @ " << 
+		// 	operations[i].timestamp << " ----- " <<
+		// 	operations_permuted[i].is_query << "|" << operations_permuted[i].arguments.first << " " <<
+		// 	operations_permuted[i].arguments.second << " @ " << 
+		// 	operations_permuted[i].timestamp << endl;
+		// 	if (operations[i].arguments.first != operations_permuted[i].arguments.first)
+		// 		cout << endl << endl;
+		// }
 	}
 
 private:
 	Setting setting;
 	Logger logg;
 	vector<Operation> insertion_operations;
+	vector<Operation> insertion_operations_permuted;
 	vector<Operation> operations;
+	vector<Operation> operations_permuted;
 
 	// Array2D <uint32_t, 3000, 3000> T;
 	list<ui_pair>* insertion_time;
@@ -861,6 +876,19 @@ private:
 				Operation(false, make_pair(u, v), timestamp));
 		}
 		infile.close();
+		
+	}
+	void permute_insertions() {
+		insertion_operations_permuted = insertion_operations;
+		for (size_t i = 0; i + 10 < insertion_operations.size(); i += 10){
+			if (rand() % 10 == 1){
+				swap(insertion_operations_permuted[i + 10], insertion_operations_permuted[i]);
+			}
+		}
+		// for (size_t i = 0; i + 10 < insertion_operations_permuted.size(); i ++){
+		// 	cout << i << " : " << insertion_operations_permuted[i].arguments.first << ' ' <<
+		//  	insertion_operations_permuted[i].arguments.second << endl;
+		// }
 	}
 
 	// Prints shortest paths from src to all other vertices
@@ -912,10 +940,10 @@ private:
 			}
 		}
 
-		// Print shortest distances stored in dist[]
-		printf("Vertex Distance from Source: %d\n", src);
-		for (size_t i = 0; i < setting.nodes; ++i)
-			printf("%ld \t\t %d\n", i, bottle_neck[src][i]);
+		// // Print shortest distances stored in dist[]
+		// printf("Vertex Distance from Source: %d\n", src);
+		// for (size_t i = 0; i < setting.nodes; ++i)
+		// 	printf("%ld \t\t %d\n", i, bottle_neck[src][i]);
 	}
 	void set_t(){
 		uint32_t u, v;
@@ -926,13 +954,13 @@ private:
 		}
 	}
 	
-	void generate_operations() {
+	void generate_operations(vector<Operation>& insertions, vector<Operation>& operations) {
 		engine generator(setting.OPERATION_SEED);
 		engine query_generator(setting.QUERY_SEED);
 		uniform_int_distribution<u32> distribute(0, 99);
 		uniform_int_distribution<u32> query_chance_distribute(0, setting.nodes - 1);
 		uint32_t u, v;
-		for (const auto &x : insertion_operations) {
+		for (const auto &x : insertions) {
 			u = x.arguments.first;
 			v = x.arguments.second;
 			// currently each insertion and query have the same timestamp
@@ -946,7 +974,7 @@ private:
 			}
 			operations.push_back(Operation(false, make_pair(u, v), x.timestamp));
 		}
-		logg.insertion_operations_cnt = insertion_operations.size();
+		logg.insertion_operations_cnt = insertions.size();
 	}
 	int get_test_id() { // can probably read backwards later to enhance speed
 		string line;
