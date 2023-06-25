@@ -114,11 +114,25 @@ struct Setting {
 
 struct Operation {
 	Operation(const bool is_query_, const pair<uint32_t, uint32_t> arguments_,
-			  const uint32_t timestamp_)
+			  const int64_t timestamp_)
 		: is_query(is_query_), arguments(arguments_), timestamp(timestamp_) {}
+
+	bool operator == (const Operation& p) const {
+   		return is_query == p.is_query
+		&& arguments.first == p.arguments.first
+		&& arguments.second == p.arguments.second
+		&& timestamp == p.timestamp;
+	}
+
+	void print(){
+		cout << ((is_query == true) ? "Query" : "Ins") << "| (" << arguments.first
+				<< ", " << arguments.second << ") @ " << timestamp << endl;
+	}
+	
 	bool is_query;
 	pair<uint32_t, uint32_t> arguments;
-	uint32_t timestamp;
+	int64_t timestamp;
+
 };
 
 class reachabilityTree { // this is a simple incremental reachability tree for vertex s
@@ -225,7 +239,7 @@ public:
 
 	virtual ~Algorithms(){};
 
-	virtual bool answer_query(const uint32_t u, const uint32_t v) = 0;
+	virtual bool answer_query(const Operation& op) = 0;
 
 	void run(const vector<Operation> operations) {
 		logg.reset();
@@ -246,8 +260,10 @@ public:
 					cerr << u << " " << v << endl;
 				}
 				auto started = std::chrono::high_resolution_clock::now();
-				bool result = answer_query(u, v);
-
+				bool result = answer_query(x);
+				if (result == true){
+					cout << "reachable query: " << u << " " << v << endl;
+				}
 				query_time += chrono::duration_cast<std::chrono::nanoseconds>(
 								  chrono::high_resolution_clock::now() - started)
 								  .count();
@@ -257,7 +273,7 @@ public:
 			}
 			else {
 				auto started = std::chrono::high_resolution_clock::now();
-				add_edge(u, v);
+				add_edge(x);
 				insertion_time += chrono::duration_cast<std::chrono::nanoseconds>(
 									  chrono::high_resolution_clock::now() - started)
 									  .count();
@@ -275,6 +291,9 @@ public:
 			}
 		}
 		cout << endl;
+		for (auto x : operations) {
+			x.print();
+		}
 		// printf("Time taken: %.2fs\n", (double)(clock() - tStart)/CLOCKS_PER_SEC);
 		// cout << "Queries answered: " << queries_answered << endl;
 		// cout << "Reachable queries: " << true_q << endl;
@@ -295,9 +314,9 @@ protected:
 	vector<vector<uint32_t>> in_edge;
 	vector<bool> results;
 
-	virtual void add_edge(const uint32_t u, const uint32_t v) {
-		out_edge[u].push_back(v);
-		in_edge[v].push_back(u);
+	virtual void add_edge(const Operation& op) {
+		out_edge[op.arguments.first].push_back(op.arguments.second);
+		in_edge[op.arguments.second].push_back(op.arguments.first);
 	}
 };
 
@@ -332,8 +351,8 @@ public:
 		return ans;
 	}
 
-	bool answer_query(const uint32_t u, const uint32_t v) {
-		return calculate_bfs(u, v);
+	bool answer_query(const Operation& op) {
+		return calculate_bfs(op.arguments.first, op.arguments.second);
 	}
 
 private:
@@ -359,14 +378,50 @@ public:
 		}
 		return visited_dfs[v];
 	}
-	bool answer_query(const uint32_t u, const uint32_t v) {
+	bool answer_query(const Operation& op) {
 		visited_dfs.assign(visited_dfs.size(), false);
-		return calculate_dfs(u, v);
+		return calculate_dfs(op.arguments.first, op.arguments.second);
 	}
 
 private:
 	vector<bool> visited_dfs;
 };
+
+class mini_dfs {
+
+public:
+	mini_dfs(const uint32_t nodes) { //maybe mini bfs is faster
+		visited_dfs.resize(nodes, false);
+		out_edge.assign(nodes, vector<uint32_t>());
+
+	}
+
+	bool calculate_dfs(const uint32_t u, const uint32_t v) {
+		visited_dfs[u] = true;
+		if (visited_dfs[v]) {
+			return true;
+		}
+		for (const auto& i : out_edge[u]) {
+			if (!(visited_dfs[i])) {
+				calculate_dfs(i, v);
+			}
+		}
+		return visited_dfs[v];
+	}
+	bool answer_query(const uint32_t u, const uint32_t v) {
+		visited_dfs.assign(visited_dfs.size(), false);
+		return calculate_dfs(u, v);
+	}
+	void add_edge(const uint32_t u, const uint32_t v) {
+		out_edge[u].push_back(v);
+	}
+
+private:
+	vector<bool> visited_dfs;
+	vector<vector<uint32_t>> out_edge;
+
+};
+
 
 class Bibfs : public Algorithms {
 
@@ -375,8 +430,8 @@ public:
 		visited_bibfs_source.resize(setting.nodes, false);
 		visited_bibfs_sink.resize(setting.nodes, false);
 	}
-	bool answer_query(const uint32_t u, const uint32_t v) {
-		return calculate_bibfs(u, v);
+	bool answer_query(const Operation& op) {
+		return calculate_bibfs(op.arguments.first, op.arguments.second);
 	}
 
 private:
@@ -384,7 +439,7 @@ private:
 	vector<bool> visited_bibfs_sink;
 
 	bool calculate_bibfs(const uint32_t u, const uint32_t v) {
-		bool found_path = false;
+		bool found_path = (u == v); //for special case where u and v are the same
 		uint32_t curr_node;
 		vector<uint32_t> source_queue, sink_queue;
 		size_t source_pointer = 0;
@@ -469,12 +524,12 @@ public:
 
 		return calculate_bibfs(u, v);
 	}
-	bool answer_query(const uint32_t u, const uint32_t v) {
+	bool answer_query(const Operation& op) {
 		if (!generated_sv) {
 			generate_sv_list();
 			generated_sv = true;
 		}
-		return calculate_sv(u, v);
+		return calculate_sv(op.arguments.first, op.arguments.second);
 	}
 
 private:
@@ -561,12 +616,254 @@ private:
 		}
 	}
 
-	void add_edge(const uint32_t u, const uint32_t v) {
+	void add_edge(const Operation& op) {
+		uint32_t u, v;
+		u = op.arguments.first;
+		v = op.arguments.second;
 		out_edge[u].push_back(v);
 		in_edge[v].push_back(u);
 		if (generated_sv)
 			update_sv(u, v);
 	}
+
+	bool calculate_bibfs(const uint32_t u, const uint32_t v) {
+		bool found_path = (u == v);
+		uint32_t curr_node;
+		vector<uint32_t> source_queue, sink_queue;
+		size_t source_pointer = 0;
+		size_t sink_pointer = 0;
+		visited_bibfs_source[u] = true;
+		visited_bibfs_sink[v] = true;
+		source_queue.push_back(u);
+		sink_queue.push_back(v);
+		while (!found_path && source_pointer < source_queue.size() &&
+			   sink_pointer < sink_queue.size()) {
+			// running bfs for the source queue one time
+			curr_node = source_queue[source_pointer];
+			source_pointer++;
+			for (const auto& i : out_edge[curr_node]) {
+				if (!visited_bibfs_source[i]) {
+					visited_bibfs_source[i] = true;
+					source_queue.push_back(i);
+				}
+				if (visited_bibfs_source[i] && visited_bibfs_sink[i]) {
+					found_path = true;
+				}
+			}
+			// running bfs for the back queue one time
+			curr_node = sink_queue[sink_pointer];
+			sink_pointer++;
+			for (const auto& i : in_edge[curr_node]) {
+				if (!visited_bibfs_sink[i]) {
+					visited_bibfs_sink[i] = true;
+					sink_queue.push_back(i);
+				}
+				if (visited_bibfs_source[i] && visited_bibfs_sink[i]) {
+					found_path = true;
+				}
+			}
+		}
+		for (const uint32_t i : source_queue) {
+			visited_bibfs_source[i] = false;
+		}
+		for (const uint32_t i : sink_queue) {
+			visited_bibfs_sink[i] = false;
+		}
+		return found_path;
+	}
+};
+
+class Pred : public Algorithms {
+
+public:
+	Pred(const Setting &setting_, Logger &logg_, vector<Operation>& pred_insertions_)
+			 : Algorithms(setting_, logg_), pred_insertions(pred_insertions_){
+		
+		visited_bibfs_source.resize(setting.nodes, false);
+		visited_bibfs_sink.resize(setting.nodes, false);
+		
+		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
+		last_seen_pred = -1;
+		calculate_d();
+	}
+	
+
+	bool calculate_pred(const uint32_t u, const uint32_t v) {
+		update_lcs(); //update last seen insertion position
+		size_t diff = logg.curr_insertion_cnt - (last_seen_pred + 1);
+		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
+			// cout << "fallback " << diff << " : " << sqrt_n << endl;
+			return calculate_bibfs(u, v); //maybe we can run 
+		}
+		// cout << "lcs is: " << last_seen_pred << endl;
+		return calculate_pred_permuted(u, v);
+	}
+
+	bool answer_query(const Operation& op) {
+		uint32_t u, v;
+		u = op.arguments.first;
+		v = op.arguments.second;
+		if (bottle_neck[u][v] <= curr_timestamp)
+			return true;
+		// if (curr_timestamp < op.timestamp){
+		// 	cout << "fallback " << curr_timestamp << " and " << op.timestamp << endl;
+		// 	return calculate_bibfs(u, v);
+		// }
+		return calculate_pred(u, v);
+	}
+
+private:
+	vector<bool> visited_bibfs_source;
+	vector<bool> visited_bibfs_sink;
+	vector<Operation>& pred_insertions;
+	vector<Operation> real_insertions;
+
+
+	// Array2D <uint32_t, 3000, 3000> T;
+	list<ui_pair>* insertion_time;
+	vector<vector<int64_t>> bottle_neck;
+
+	size_t sqrt_n;
+	int last_seen_pred;
+	int64_t curr_timestamp = -1;
+
+	void update_lcs() { //returns the first position predicted wrong
+		while (last_seen_pred < logg.curr_insertion_cnt &&
+				(find(real_insertions.begin() + last_seen_pred + 1, real_insertions.end(),
+				pred_insertions[last_seen_pred + 1]) != real_insertions.end())){
+			last_seen_pred ++;
+		}
+	}
+
+	bool calculate_pred_permuted(const uint32_t s, const uint32_t t){
+		if ((int)real_insertions.size() != logg.curr_insertion_cnt ||
+			(int)real_insertions.size() <= last_seen_pred){
+			cerr << real_insertions.size() << " " << logg.curr_insertion_cnt << endl;
+			cerr << "expected more real insertions" << endl;
+			exit(0);
+		}
+		if (logg.curr_insertion_cnt == 0) 
+			return calculate_bibfs(s, t);
+		// cout << "answering " << s << " " << t << " with pred" << endl;
+		vector<ui_pair> nodes = {make_pair(s, s), make_pair(t, t)};
+		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_pred + 1) + 2; // slightly faster
+		// cout << "reached here" << endl;
+		for (size_t i = 2; i < nodes_s; i++){
+			// cout << "last seen pred is: " << last_seen_pred << endl;
+			// cout << "i is: " << i << endl;
+			// cout << "real insertion size: " << real_insertions.size() << endl;
+			nodes.push_back(real_insertions[last_seen_pred + i - 1].arguments);
+		} 
+
+		mini_dfs dfs(nodes_s * 2 - 2);
+		// cout << "missing edges were: " << logg.curr_insertion_cnt - (last_seen_pred + 1)
+			// << endl << "nodes_s: " << nodes_s << endl;
+ 		for (uint32_t i = 0; i < nodes_s; i++){
+			for (uint32_t j = 0; j < nodes_s; j++){
+				if (j == i)
+					continue;
+
+				uint32_t start, end;
+				
+				start = nodes[i].second;
+				end = nodes[j].first;
+				// cout << "start and end are: " << start << "-" << end << endl;
+				if (bottle_neck[start][end] <= curr_timestamp){
+					dfs.add_edge(i, j);
+				}
+			}
+		}
+		return dfs.answer_query(0, 1);
+
+	}
+
+	void set_t(){
+		uint32_t u, v;
+		for (const auto &x: pred_insertions){
+			u = x.arguments.first;
+			v = x.arguments.second;
+			insertion_time[u].push_back(make_pair(v, x.timestamp));
+		}
+	}
+
+	void calculate_d(){
+		insertion_time = new list<ui_pair> [setting.nodes];
+		bottle_neck.assign(setting.nodes, vector<int64_t>());
+		set_t();
+		for (size_t i = 0; i < setting.nodes; i++){
+			store_shortest_path(i);
+		}
+		
+		// for (size_t i = 0; i < insertion_operations.size(); i++){
+		// 	cout << operations[i].is_query << "|" << operations[i].arguments.first << " " <<
+		// 	operations[i].arguments.second << " @ " << 
+		// 	operations[i].timestamp << " ----- " <<
+		// 	operations_permuted[i].is_query << "|" << operations_permuted[i].arguments.first << " " <<
+		// 	operations_permuted[i].arguments.second << " @ " << 
+		// 	operations_permuted[i].timestamp << endl;
+		// 	if (operations[i].arguments.first != operations_permuted[i].arguments.first)
+		// 		cout << endl << endl;
+		// }
+		
+		
+		
+		delete[] insertion_time; //return and dynamic pointer later
+	}
+
+	void store_shortest_path (uint32_t src) {
+		// Create a priority queue to store vertices that
+		// are being preprocessed. This is weird syntax in C++.
+		// Refer below link for details of this syntax
+		// https://www.geeksforgeeks.org/implement-min-heap-using-stl/
+		priority_queue< ui_pair, vector <ui_pair> , greater<ui_pair> > pq;
+
+		// Create a vector for distances and initialize all
+		// distances as infinite (INF)
+		// vector<uint32_t> dist(setting.nodes, INF);
+		bottle_neck[src].assign(setting.nodes, INF);
+		// Insert source itself in priority queue and initialize
+		// its distance as 0.
+		pq.push(make_pair(0, src));
+		bottle_neck[src][src] = 0;
+		
+		vector<bool> f(setting.nodes, false);
+
+		/* Looping till priority queue becomes empty (or all
+		distances are not finalized) */
+		while (!pq.empty()) {
+			// The first vertex in pair is the minimum distance
+			// vertex, extract it from priority queue.
+			// vertex label is stored in second of pair (it
+			// has to be done this way to keep the vertices
+			// sorted distance (distance must be first item
+			// in pair)
+			uint32_t u = pq.top().second;
+			pq.pop();
+			f[u] = true;
+
+			// 'i' is used to get all adjacent vertices of a vertex
+			list< ui_pair >::iterator i;
+			for (i = insertion_time[u].begin(); i != insertion_time[u].end(); ++i) {
+				// Get vertex label and weight of current adjacent
+				// of u.
+				uint32_t v = (*i).first;
+				int64_t timestamp = (*i).second;
+
+				// If there is shorted path to v through u.
+				if (f[v] == false && bottle_neck[src][v] > max(bottle_neck[src][u], timestamp)) {
+					// Updating distance of v
+					bottle_neck[src][v] = max(bottle_neck[src][u], timestamp);
+					pq.push(make_pair(bottle_neck[src][v], v));
+				}
+			}
+		}
+
+		// // Print shortest distances stored in dist[]
+		// printf("Vertex Distance from Source: %d\n", src);
+		// for (size_t i = 0; i < setting.nodes; ++i)
+		// 	printf("%ld \t\t %d\n", i, bottle_neck[src][i]);
+	}
+
 
 	bool calculate_bibfs(const uint32_t u, const uint32_t v) {
 		bool found_path = false;
@@ -613,6 +910,13 @@ private:
 		}
 		return found_path;
 	}
+
+	void add_edge(const Operation& op) {
+		out_edge[op.arguments.first].push_back(op.arguments.second);
+		in_edge[op.arguments.second].push_back(op.arguments.first);
+		real_insertions.push_back(op);
+		curr_timestamp = max(curr_timestamp, op.timestamp);
+	}
 };
 
 void set_time(string &t) {
@@ -630,14 +934,13 @@ void set_time(string &t) {
 class Program {
 public:
 	Program() {}
-	~Program(){
-		// delete[] insertion_time; //return and dynamic pointer later
-	}
+	~Program(){}
 	void read_parse_input(const int argc, const char *argv[]) {
 		for (int i = 1; i < argc; i += 2) {
 			if (!strcmp(argv[i], "-alg")) {
 				if (strcmp(argv[i + 1], "dfs") && strcmp(argv[i + 1], "bfs") &&
 					strcmp(argv[i + 1], "bibfs") &&
+					strcmp(argv[i + 1], "pred") &&
 					string(argv[i + 1]).substr(0, 3) != "sv_") {
 					cerr << "Wrong Input for Algorithm.\n";
 					exit(0);
@@ -724,7 +1027,6 @@ public:
 						   ((100 + setting.QUERY_PERCENTAGE) / 100));
 		generate_operations(insertion_operations, operations); // add query operatios to input and store result in
 							   // "operations"
-		cout << "done read parse input " << endl;
 		logg.test_id = get_test_id();
 		logg.algorithm = setting.ALGORITHM;
 	}
@@ -739,6 +1041,11 @@ public:
 				alg = unique_ptr<Algorithms>(new Bfs(setting, logg));
 			else if (setting.ALGORITHM == "bibfs")
 				alg = unique_ptr<Algorithms>(new Bibfs(setting, logg));
+			else if (setting.ALGORITHM == "pred") {
+				permute_insertions(i);
+				// generate_operations(insertion_operations_permuted, operations_permuted);
+				alg = unique_ptr<Algorithms>(new Pred(setting, logg, insertion_operations_permuted));
+			}
 			else if (setting.ALGORITHM.substr(0, 3) == "sv_") {
 				alg = unique_ptr<Algorithms>(
 					new Sv(stoi(setting.ALGORITHM.substr(3)), setting, logg, i));
@@ -793,30 +1100,8 @@ public:
 				 << "#reachable queries: " << logg.num_reachable_queries << '\n'
 				 << string(50, '*') << "\n";
 	}
-	void calculate_d(){
-		insertion_time = new list<ui_pair> [setting.nodes];
-		bottle_neck.assign(setting.nodes, vector<uint32_t>());
-		set_t();
-		for (size_t i = 0; i < setting.nodes; i++){
-			store_shortest_path(i);
-			cout << "calculated dijkstra " << i << endl;
-		}
-		cout << "done dijkstra" << endl;
-		delete[] insertion_time; //return and dynamic pointer later
-		permute_insertions();
-		cout << "done permute" << endl;
-		generate_operations(insertion_operations_permuted, operations_permuted);
-		// for (size_t i = 0; i < insertion_operations.size(); i++){
-		// 	cout << operations[i].is_query << "|" << operations[i].arguments.first << " " <<
-		// 	operations[i].arguments.second << " @ " << 
-		// 	operations[i].timestamp << " ----- " <<
-		// 	operations_permuted[i].is_query << "|" << operations_permuted[i].arguments.first << " " <<
-		// 	operations_permuted[i].arguments.second << " @ " << 
-		// 	operations_permuted[i].timestamp << endl;
-		// 	if (operations[i].arguments.first != operations_permuted[i].arguments.first)
-		// 		cout << endl << endl;
-		// }
-	}
+	
+	
 
 private:
 	Setting setting;
@@ -825,11 +1110,6 @@ private:
 	vector<Operation> insertion_operations_permuted;
 	vector<Operation> operations;
 	vector<Operation> operations_permuted;
-
-	// Array2D <uint32_t, 3000, 3000> T;
-	list<ui_pair>* insertion_time;
-	vector<vector<uint32_t>> bottle_neck;
-
 
 	void convert_input() {
 		
@@ -863,13 +1143,15 @@ private:
 
 		new_file.close();
 	}
+
 	void read_input_file() {
 		convert_input();
 		cout << "Input generated!" << endl;
 
 		std::filesystem::path p(setting.INPUT_FILE);
 		ifstream infile("build/" + string(p.filename()));
-		uint32_t u, v, timestamp;
+		uint32_t u, v;
+		int64_t timestamp;
 
 		while (infile >> u >> v >> timestamp) {
 			insertion_operations.push_back(
@@ -878,80 +1160,22 @@ private:
 		infile.close();
 		
 	}
-	void permute_insertions() {
+
+	void permute_insertions(uint32_t sv_seed) {
+		engine generator(sv_seed);
+		uniform_int_distribution<u32> distribute(0, 10);
 		insertion_operations_permuted = insertion_operations;
 		for (size_t i = 0; i + 10 < insertion_operations.size(); i += 10){
-			if (rand() % 10 == 1){
-				swap(insertion_operations_permuted[i + 10], insertion_operations_permuted[i]);
+			if (distribute(generator) == 1){
+				swap(insertion_operations_permuted[i + 10].arguments.first, insertion_operations_permuted[i].arguments.first);
+				swap(insertion_operations_permuted[i + 10].arguments.second, insertion_operations_permuted[i].arguments.second);
+				//check and see if this swap works
 			}
 		}
 		// for (size_t i = 0; i + 10 < insertion_operations_permuted.size(); i ++){
 		// 	cout << i << " : " << insertion_operations_permuted[i].arguments.first << ' ' <<
 		//  	insertion_operations_permuted[i].arguments.second << endl;
 		// }
-	}
-
-	// Prints shortest paths from src to all other vertices
-	void store_shortest_path (uint32_t src) {
-		// Create a priority queue to store vertices that
-		// are being preprocessed. This is weird syntax in C++.
-		// Refer below link for details of this syntax
-		// https://www.geeksforgeeks.org/implement-min-heap-using-stl/
-		priority_queue< ui_pair, vector <ui_pair> , greater<ui_pair> > pq;
-
-		// Create a vector for distances and initialize all
-		// distances as infinite (INF)
-		// vector<uint32_t> dist(setting.nodes, INF);
-		bottle_neck[src].assign(setting.nodes, INF);
-		// Insert source itself in priority queue and initialize
-		// its distance as 0.
-		pq.push(make_pair(0, src));
-		bottle_neck[src][src] = 0;
-		
-		vector<bool> f(setting.nodes, false);
-
-		/* Looping till priority queue becomes empty (or all
-		distances are not finalized) */
-		while (!pq.empty()) {
-			// The first vertex in pair is the minimum distance
-			// vertex, extract it from priority queue.
-			// vertex label is stored in second of pair (it
-			// has to be done this way to keep the vertices
-			// sorted distance (distance must be first item
-			// in pair)
-			uint32_t u = pq.top().second;
-			pq.pop();
-			f[u] = true;
-
-			// 'i' is used to get all adjacent vertices of a vertex
-			list< ui_pair >::iterator i;
-			for (i = insertion_time[u].begin(); i != insertion_time[u].end(); ++i) {
-				// Get vertex label and weight of current adjacent
-				// of u.
-				uint32_t v = (*i).first;
-				uint32_t timestamp = (*i).second;
-
-				// If there is shorted path to v through u.
-				if (f[v] == false && bottle_neck[src][v] > max(bottle_neck[src][u], timestamp)) {
-					// Updating distance of v
-					bottle_neck[src][v] = max(bottle_neck[src][u], timestamp);
-					pq.push(make_pair(bottle_neck[src][v], v));
-				}
-			}
-		}
-
-		// // Print shortest distances stored in dist[]
-		// printf("Vertex Distance from Source: %d\n", src);
-		// for (size_t i = 0; i < setting.nodes; ++i)
-		// 	printf("%ld \t\t %d\n", i, bottle_neck[src][i]);
-	}
-	void set_t(){
-		uint32_t u, v;
-		for (const auto &x: insertion_operations){
-			u = x.arguments.first;
-			v = x.arguments.second;
-			insertion_time[u].push_back(make_pair(v, x.timestamp));
-		}
 	}
 	
 	void generate_operations(vector<Operation>& insertions, vector<Operation>& operations) {
@@ -960,6 +1184,8 @@ private:
 		uniform_int_distribution<u32> distribute(0, 99);
 		uniform_int_distribution<u32> query_chance_distribute(0, setting.nodes - 1);
 		uint32_t u, v;
+		logg.query_operations_cnt = 0;
+		logg.insertion_operations_cnt = 0;
 		for (const auto &x : insertions) {
 			u = x.arguments.first;
 			v = x.arguments.second;
@@ -976,6 +1202,7 @@ private:
 		}
 		logg.insertion_operations_cnt = insertions.size();
 	}
+
 	int get_test_id() { // can probably read backwards later to enhance speed
 		string line;
 		ifstream log_file(setting.LOG_FILE);
@@ -994,9 +1221,8 @@ int main(int argc, const char *argv[]) {
 	Program program;
 	program.read_parse_input(argc, argv);
 
-	program.calculate_d();
-	// program.execute_test();
+	program.execute_test();
 
-	// program.write_to_log();
+	program.write_to_log();
 	
 }
