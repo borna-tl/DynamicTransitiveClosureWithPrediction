@@ -92,6 +92,7 @@ struct Setting {
 };
 
 struct Operation {
+	Operation(){};
 	Operation(const bool is_query_, const pair<uint32_t, uint32_t> arguments_,
 			  const int64_t timestamp_)
 		: is_query(is_query_), arguments(arguments_), timestamp(timestamp_) {}
@@ -660,7 +661,6 @@ public:
 		
 		visited_bibfs_source.resize(setting.nodes, false);
 		visited_bibfs_sink.resize(setting.nodes, false);
-		
 		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
 		last_seen_pred = -1;
 	}
@@ -681,8 +681,12 @@ public:
 	bool calculate_pred(const uint32_t u, const uint32_t v) {
 		update_lcs(); //update last seen insertion position
 		size_t diff = logg.curr_insertion_cnt - (last_seen_pred + 1);
+		cout << "curr insertion is: " << logg.curr_insertion_cnt << endl;
+		cout << "last seen: " << last_seen_pred << endl;
+		cout << "diff was " << diff << endl;
 		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
 			// cout << "fallback " << diff << " : " << sqrt_n << endl;
+			cout << "went to calculate bibfs3" << endl;
 			return calculate_bibfs(u, v); //maybe we can run 
 		}
 		// cout << "lcs is: " << last_seen_pred << endl;
@@ -715,12 +719,25 @@ private:
 	int last_seen_pred;
 	int64_t curr_timestamp = -1;
 
+	bool has_pred (Operation& x){
+		for (auto i = real_insertions.begin() + last_seen_pred; i < real_insertions.end(); i++){
+			if (i->arguments.first == x.arguments.first 
+				&& i->arguments.second == x.arguments.second 
+				&& i->is_query == x.is_query)
+				return true;
+		}
+		return false; //fix this diff is not updating!!!
+	}
 	void update_lcs() { //returns the first position predicted wrong
-		while (last_seen_pred < logg.curr_insertion_cnt &&
-				(find(real_insertions.begin() + last_seen_pred + 1, real_insertions.end(),
-				pred_insertions[last_seen_pred + 1]) != real_insertions.end())){
+		cout << "last_seen_pred is: " << last_seen_pred << endl;
+		while (last_seen_pred < logg.curr_insertion_cnt
+				&& has_pred(pred_insertions[last_seen_pred + 1])){
+			cout << "have found "; pred_insertions[last_seen_pred + 1].print();
+			// exit(0);
 			last_seen_pred ++;
 		}
+		cout << "did not find ";  pred_insertions[last_seen_pred + 1].print();
+		exit(0);
 	}
 
 	bool calculate_pred_permuted(const uint32_t s, const uint32_t t){
@@ -730,10 +747,13 @@ private:
 			cerr << "expected more real insertions" << endl;
 			exit(0);
 		}
-		if (logg.curr_insertion_cnt == 0) 
+		if (logg.curr_insertion_cnt == 0){ 
+			cout << "went to calculate bibfs2" << endl;
 			return calculate_bibfs(s, t);
+		}
 		vector<ui_pair> nodes = {make_pair(s, s), make_pair(t, t)};
 		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_pred + 1) + 2; // slightly faster
+		cout << "#out of order edges were: " << nodes_s << endl;
 		for (size_t i = 2; i < nodes_s; i++)
 			nodes.push_back(real_insertions[last_seen_pred + i - 1].arguments);
 		mini_dfs dfs(nodes_s * 2 - 2);
@@ -755,10 +775,12 @@ private:
 
 	void set_t(){
 		uint32_t u, v;
+		cout << "im here and i should be here1" << endl;
 		for (const auto &x: pred_insertions){
 			u = x.arguments.first;
 			v = x.arguments.second;
 			insertion_time[u].push_back(make_pair(v, x.timestamp));
+			// cout << "pred insertions: " << u << " " << v << endl;
 		}
 	}
 
@@ -1012,6 +1034,7 @@ public:
 		for (size_t i = 0; i < setting.TEST_RUN_COUNT; i++) {
 			unique_ptr<Pred> pred;
 			permute_insertions(i);
+
 			// cout << "permuted insertions" << endl;
 			// if (pred != nullptr){
 			// 	cout << "already preheated!" << endl;
@@ -1020,8 +1043,15 @@ public:
 			// else {
 			// 	// generate_operations(insertion_operations_permuted, operations_permuted);
 				pred = unique_ptr<Pred>(new Pred(setting, logg, insertion_operations_permuted));
-				pred->preheat();
+				// pred->preheat();
 			// }
+			cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
+			for (auto x : insertion_operations)
+				x.print();
+			cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS PERMUTED ~~~~~~~~~~~~~" << endl;
+			for (auto x : insertion_operations_permuted)
+				x.print();
+			exit(0);
 			pred->run(operations);
 			logg.run_durations.push_back(logg.query_durations.back() +
 										 logg.insertion_durations.back());
@@ -1153,23 +1183,133 @@ private:
 		cout << "input done" << endl;
 	}
 
+	size_t mod (size_t x, size_t y){
+		size_t m = x % y;
+		if (m < 0)
+			m +=  y;
+		return m; 
+	}
+
 	void permute_insertions(uint32_t sv_seed) {
 		engine generator(sv_seed);
-		uniform_int_distribution<u32> distribute(0, 10);
-		insertion_operations_permuted = insertion_operations;
-		for (size_t i = 0; i + 10 < insertion_operations.size(); i += 10){
-			if (distribute(generator) == 1){
-				swap(insertion_operations_permuted[i + 10].arguments.first, insertion_operations_permuted[i].arguments.first);
-				swap(insertion_operations_permuted[i + 10].arguments.second, insertion_operations_permuted[i].arguments.second);
-				//check and see if this swap works
+		// uniform_int_distribution<u32> distribute(0, 10);
+		normal_distribution<double> distribute(0.0,3.0); //might have ro calibrate
+
+		insertion_operations_permuted.resize((int)logg.insertion_operations_cnt);
+		bool filled [logg.insertion_operations_cnt];
+		for (int i = 0; i < (int)logg.insertion_operations_cnt ; i++)
+			filled[i] = false;
+		// uint32_t dif_sum = 0;
+		// int hash [10000] = {0};
+		int i, j;
+		for (i = 0; i < (int)logg.insertion_operations_cnt - 10; i += 10){ //batch size
+			for (j = 0; j < 10; j++){
+				int noise = round(distribute(generator));
+				if (noise >= 10 || noise < 0){
+					noise = mod(noise, 10);
+					//probably can observe and gather stats later
+				}
+				int new_noise = +noise - 1; //for do-while loop
+				int new_noise_rev = -noise + 1; //for do-while loop
+				do {
+					new_noise ++;
+					new_noise_rev --;
+					if (j + new_noise < 0)
+						new_noise += 10;
+					else if (j + new_noise >= 10)
+						new_noise -= 10;
+					if (j + new_noise_rev < 0)
+						new_noise_rev += 10;
+					else if (j + new_noise_rev >= 10)
+						new_noise_rev -= 10;
+					// if (j + new_noise >= 10){
+					// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+				}
+				while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
+				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
+				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
+					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
+						cerr << "we have a problem" << endl; //for debugging
+						exit(0);
+				}
+				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
+				// insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
+				insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
+				insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
+				insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
+				insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
+
+				// swap(insertion_operations_permuted[i + j + new_noise].arguments.first,
+				// 		insertion_operations[i + j].arguments.first);
+				// swap(insertion_operations_permuted[i + j + new_noise].arguments.second,
+				// 		insertion_operations[i + j].arguments.second);
+
+				// cout << "filled " << i + j + new_noise << endl;
+				// cout << "with: " << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+
+				filled[i + j + new_noise] = true;
+				// dif_sum += abs(int(new_noise - i));
+				// if (abs(int(new_noise - i)) == 1004)
+				// 	cout << "hesam: " << new_noise << " " << i << endl;
+				// hash[abs(int(new_noise - i))]++;
 			}
 		}
-		// for (size_t i = 0; i + 10 < insertion_operations_permuted.size(); i ++){
-		// 	cout << i << " : " << insertion_operations_permuted[i].arguments.first << ' ' <<
-		//  	insertion_operations_permuted[i].arguments.second << endl;
-		// }
+		int batch_size = logg.insertion_operations_cnt - i;
+		if (batch_size){
+			for (j = 0; j < batch_size; j++){
+				int noise = round(distribute(generator));
+				if (noise >= batch_size || noise < 0){
+					noise = mod(noise, batch_size);
+					//probably can observe and gather stats later
+				}
+				int new_noise = +noise - 1; //for do-while loop
+				int new_noise_rev = -noise + 1; //for do-while loop
+				do {
+					new_noise ++;
+					new_noise_rev --;
+					if (j + new_noise < 0)
+						new_noise += batch_size;
+					else if (j + new_noise >= batch_size)
+						new_noise -= batch_size;
+					if (j + new_noise_rev < 0)
+						new_noise_rev += batch_size;
+					else if (j + new_noise_rev >= batch_size)
+						new_noise_rev -= batch_size;
+					// if (j + new_noise >= 10){<< endl; exit(0);} 
+					// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+				}
+				while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
+				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
+				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
+					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
+						cerr << "we have a problem" << endl; //for debugging
+						exit(0);
+				}
+				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
+				// insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
+				insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
+				insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
+				insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
+				insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
+
+				// swap(insertion_operations_permuted[i + j + new_noise].arguments.first,
+				// 		insertion_operations[i + j].arguments.first);
+				// swap(insertion_operations_permuted[i + j + new_noise].arguments.second,
+				// 		insertion_operations[i + j].arguments.second);
+
+				// cout << "filled " << i + j + new_noise << endl;
+				// cout << "with: " << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+
+				filled[i + j + new_noise] = true;
+				// dif_sum += abs(int(new_noise - i));
+				// if (abs(int(new_noise - i)) == 1004)
+				// 	cout << "hesam: " << new_noise << " " << i << endl;
+				// hash[abs(int(new_noise - i))]++;
+			}	
+		}
 	}
 	
+
 	void generate_operations(vector<Operation>& insertions, vector<Operation>& operations) {
 		engine generator(setting.OPERATION_SEED);
 		engine query_generator(setting.QUERY_SEED);
