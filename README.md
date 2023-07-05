@@ -75,3 +75,5 @@ The generated log file has the following format:
 
 > **Note**
 > If the algorithm is sv_*k*, the sv nodes (for each run) are also shown in the log.
+
+<!-- add permutation batch desc in readme -->
