@@ -108,6 +108,13 @@ struct Operation {
 		cout << ((is_query == true) ? "Query" : "Ins") << "| (" << arguments.first
 				<< ", " << arguments.second << ") @ " << timestamp << endl;
 	}
+
+	void reset(){
+		is_query = false;
+		arguments.first = 0;
+		arguments.second = 0;
+		timestamp = 0;
+	}
 	
 	bool is_query;
 	pair<uint32_t, uint32_t> arguments;
@@ -681,12 +688,12 @@ public:
 	bool calculate_pred(const uint32_t u, const uint32_t v) {
 		update_lcs(); //update last seen insertion position
 		size_t diff = logg.curr_insertion_cnt - (last_seen_pred + 1);
-		cout << "curr insertion is: " << logg.curr_insertion_cnt << endl;
-		cout << "last seen: " << last_seen_pred << endl;
-		cout << "diff was " << diff << endl;
+		// cout << "curr insertion is: " << logg.curr_insertion_cnt << endl;
+		// cout << "last seen: " << last_seen_pred << endl;
+		// cout << "diff was " << diff << endl;
 		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
 			// cout << "fallback " << diff << " : " << sqrt_n << endl;
-			cout << "went to calculate bibfs3" << endl;
+			// cout << "went to calculate bibfs3" << endl;
 			return calculate_bibfs(u, v); //maybe we can run 
 		}
 		// cout << "lcs is: " << last_seen_pred << endl;
@@ -703,6 +710,8 @@ public:
 		// 	cout << "fallback " << curr_timestamp << " and " << op.timestamp << endl;
 		// 	return calculate_bibfs(u, v);
 		// }
+		// cout << "answering query = " << op.arguments.first << " " <<
+		// op.arguments.second << " -- " << op.timestamp << endl;
 		return calculate_pred(u, v);
 	}
 
@@ -711,6 +720,8 @@ private:
 	vector<bool> visited_bibfs_sink;
 	vector<Operation>& pred_insertions;
 	vector<Operation> real_insertions;
+	vector<Operation> unpredicted_insertions;
+
 
 	list<ui_pair>* insertion_time;
 	vector<vector<int64_t>> bottle_neck;
@@ -719,25 +730,34 @@ private:
 	int last_seen_pred;
 	int64_t curr_timestamp = -1;
 
-	bool has_pred (Operation& x){
-		for (auto i = real_insertions.begin() + last_seen_pred; i < real_insertions.end(); i++){
+	const vector<Operation>::iterator find_pred (Operation& x){
+		// cout << "~~~~~~~~~~~~~~~PRED INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
+		// for (auto x : pred_insertions)
+		// 	x.print();
+		for (auto i = unpredicted_insertions.begin(); i < unpredicted_insertions.end(); i++){
+			// cout << "checking insertion*"; i->print();
 			if (i->arguments.first == x.arguments.first 
 				&& i->arguments.second == x.arguments.second 
 				&& i->is_query == x.is_query)
-				return true;
+				return i;
 		}
-		return false; //fix this diff is not updating!!!
+		return unpredicted_insertions.end(); //fix this diff is not updating!!!
 	}
 	void update_lcs() { //returns the first position predicted wrong
-		cout << "last_seen_pred is: " << last_seen_pred << endl;
-		while (last_seen_pred < logg.curr_insertion_cnt
-				&& has_pred(pred_insertions[last_seen_pred + 1])){
-			cout << "have found "; pred_insertions[last_seen_pred + 1].print();
-			// exit(0);
-			last_seen_pred ++;
+		// cout << "last_seen_pred is: " << last_seen_pred << endl;
+		// cout << "curr insertion cnt is: " << logg.curr_insertion_cnt << endl;
+		while (last_seen_pred < logg.curr_insertion_cnt){
+			auto it = find_pred(pred_insertions[last_seen_pred + 1]);
+			if (it != unpredicted_insertions.end()){
+				// cout << "have found "; pred_insertions[last_seen_pred + 1].print();
+				unpredicted_insertions.erase(it);
+				last_seen_pred++;
+			}
+			else
+				break;
 		}
-		cout << "did not find ";  pred_insertions[last_seen_pred + 1].print();
-		exit(0);
+		// cout << "did not find ";  pred_insertions[last_seen_pred + 1].print();
+		// exit(0);
 	}
 
 	bool calculate_pred_permuted(const uint32_t s, const uint32_t t){
@@ -748,12 +768,11 @@ private:
 			exit(0);
 		}
 		if (logg.curr_insertion_cnt == 0){ 
-			cout << "went to calculate bibfs2" << endl;
 			return calculate_bibfs(s, t);
 		}
 		vector<ui_pair> nodes = {make_pair(s, s), make_pair(t, t)};
 		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_pred + 1) + 2; // slightly faster
-		cout << "#out of order edges were: " << nodes_s << endl;
+		// cout << "#out of order edges were: " << nodes_s << endl;
 		for (size_t i = 2; i < nodes_s; i++)
 			nodes.push_back(real_insertions[last_seen_pred + i - 1].arguments);
 		mini_dfs dfs(nodes_s * 2 - 2);
@@ -775,7 +794,6 @@ private:
 
 	void set_t(){
 		uint32_t u, v;
-		cout << "im here and i should be here1" << endl;
 		for (const auto &x: pred_insertions){
 			u = x.arguments.first;
 			v = x.arguments.second;
@@ -792,7 +810,7 @@ private:
 		for (size_t i = 0; i < setting.nodes; i++){
 			store_shortest_path(i);
 			if (rand() % 100 == 1){
-				cout << "calculated shortest path" << i << endl;
+				cout << "calculated shortest paths from " << i << endl;
 			}
 		}
 		
@@ -905,6 +923,9 @@ private:
 		out_edge[op.arguments.first].push_back(op.arguments.second);
 		in_edge[op.arguments.second].push_back(op.arguments.first);
 		real_insertions.push_back(op);
+		unpredicted_insertions.push_back(op);
+		// if (op.arguments.first == 883 && op.arguments.second == 658)
+		// 	cout << "ITS HERE BOY" << endl; //delete for debug
 		curr_timestamp = max(curr_timestamp, op.timestamp);
 	}
 };
@@ -1035,23 +1056,24 @@ public:
 			unique_ptr<Pred> pred;
 			permute_insertions(i);
 
-			// cout << "permuted insertions" << endl;
-			// if (pred != nullptr){
-			// 	cout << "already preheated!" << endl;
-			// 	pred->reset();
-			// }
-			// else {
-			// 	// generate_operations(insertion_operations_permuted, operations_permuted);
+			if (pred != nullptr){
+				cout << "already preheated!" << endl;
+				pred->reset();
+			}
+			else {
+				// generate_operations(insertion_operations_permuted, operations_permuted);
 				pred = unique_ptr<Pred>(new Pred(setting, logg, insertion_operations_permuted));
-				// pred->preheat();
-			// }
-			cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
-			for (auto x : insertion_operations)
-				x.print();
-			cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS PERMUTED ~~~~~~~~~~~~~" << endl;
-			for (auto x : insertion_operations_permuted)
-				x.print();
-			exit(0);
+				pred->preheat();
+			}
+
+			// cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
+			// for (auto x : insertion_operations)
+			// 	x.print();
+			// cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS PERMUTED ~~~~~~~~~~~~~" << endl;
+			// for (auto x : insertion_operations_permuted)
+			// 	x.print();
+			// exit(0);
+
 			pred->run(operations);
 			logg.run_durations.push_back(logg.query_durations.back() +
 										 logg.insertion_durations.back());
@@ -1196,9 +1218,11 @@ private:
 		normal_distribution<double> distribute(0.0,3.0); //might have ro calibrate
 
 		insertion_operations_permuted.resize((int)logg.insertion_operations_cnt);
-		bool filled [logg.insertion_operations_cnt];
-		for (int i = 0; i < (int)logg.insertion_operations_cnt ; i++)
+		bool filled [logg.insertion_operations_cnt]; //use = {0}
+		for (int i = 0; i < (int)logg.insertion_operations_cnt ; i++){
 			filled[i] = false;
+			insertion_operations_permuted[i].reset();
+		}
 		// uint32_t dif_sum = 0;
 		// int hash [10000] = {0};
 		int i, j;
@@ -1229,7 +1253,7 @@ private:
 				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
 				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
 					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
-						cerr << "we have a problem" << endl; //for debugging
+						cerr << "we have a problem 1" << endl; //for debugging
 						exit(0);
 				}
 				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
@@ -1282,7 +1306,7 @@ private:
 				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
 				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
 					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
-						cerr << "we have a problem" << endl; //for debugging
+						cerr << "we have a problem 2" << endl; //for debugging
 						exit(0);
 				}
 				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
