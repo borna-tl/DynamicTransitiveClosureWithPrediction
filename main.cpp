@@ -691,6 +691,7 @@ public:
 		// cout << "curr insertion is: " << logg.curr_insertion_cnt << endl;
 		// cout << "last seen: " << last_seen_pred << endl;
 		// cout << "diff was " << diff << endl;
+		
 		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
 			// cout << "fallback " << diff << " : " << sqrt_n << endl;
 			// cout << "went to calculate bibfs3" << endl;
@@ -704,14 +705,18 @@ public:
 		uint32_t u, v;
 		u = op.arguments.first;
 		v = op.arguments.second;
-		if (bottle_neck[u][v] <= curr_timestamp)
-			return true;
+		// if (bottle_neck[u][v] <= curr_timestamp)
+		// 	return true;
+		//i think we have to revisit this: it's not necessarily true (bottle neck is calculated with permuted insertions and not the real ones)
+		//i commented it for now
+
 		// if (curr_timestamp < op.timestamp){
 		// 	cout << "fallback " << curr_timestamp << " and " << op.timestamp << endl;
 		// 	return calculate_bibfs(u, v);
 		// }
 		// cout << "answering query = " << op.arguments.first << " " <<
 		// op.arguments.second << " -- " << op.timestamp << endl;
+		
 		return calculate_pred(u, v);
 	}
 
@@ -767,9 +772,11 @@ private:
 			cerr << "expected more real insertions" << endl;
 			exit(0);
 		}
-		if (logg.curr_insertion_cnt == 0){ 
-			return calculate_bibfs(s, t);
-		}
+		//debugging: do we really need this?
+		// if (logg.curr_insertion_cnt == 0){ 
+		// 	return calculate_bibfs(s, t);
+		// }
+
 		vector<ui_pair> nodes = {make_pair(s, s), make_pair(t, t)};
 		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_pred + 1) + 2; // slightly faster
 		// cout << "#out of order edges were: " << nodes_s << endl;
@@ -1056,15 +1063,16 @@ public:
 			unique_ptr<Pred> pred;
 			permute_insertions(i);
 
-			if (pred != nullptr){
-				cout << "already preheated!" << endl;
-				pred->reset();
-			}
-			else {
+			// uncomment (and mofify a bit) to run on single permutation preheat multiple times
+			// if (pred != nullptr){ 
+			// 	cout << "already preheated!" << endl;
+			// 	pred->reset();
+			// }
+			// else {
 				// generate_operations(insertion_operations_permuted, operations_permuted);
 				pred = unique_ptr<Pred>(new Pred(setting, logg, insertion_operations_permuted));
 				pred->preheat();
-			}
+			// }
 
 			// cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
 			// for (auto x : insertion_operations)

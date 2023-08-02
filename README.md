@@ -78,3 +78,4 @@ The generated log file has the following format:
 
 <!-- add permutation batch desc in readme -->
 <!-- permutation is under the batch of size=10 and everything seems ok!>
+<!-- perhaps it's good to add project description to readme>
