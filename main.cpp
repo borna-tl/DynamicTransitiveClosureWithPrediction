@@ -516,7 +516,11 @@ public:
 			generate_sv_list();
 			generated_sv = true;
 		}
+		// bool ans = calculate_sv(op.arguments.first, op.arguments.second);
+		// cout << "Query " << op.arguments.first << " " << op.arguments.second << " result: " << ans << endl;
+		// return ans;
 		return calculate_sv(op.arguments.first, op.arguments.second);
+
 	}
 
 private:
@@ -669,7 +673,7 @@ public:
 		visited_bibfs_source.resize(setting.nodes, false);
 		visited_bibfs_sink.resize(setting.nodes, false);
 		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
-		last_seen_pred = -1;
+		last_seen_index = -1;
 	}
 	void preheat() {
 		calculate_d();
@@ -680,24 +684,26 @@ public:
 		visited_bibfs_sink.resize(setting.nodes, false);
 		
 		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
-		last_seen_pred = -1;
+		last_seen_index = -1;
 		real_insertions.clear();
 		logg.reset();
 	}
 
 	bool calculate_pred(const uint32_t u, const uint32_t v) {
 		update_lcs(); //update last seen insertion position
-		size_t diff = logg.curr_insertion_cnt - (last_seen_pred + 1);
+		size_t diff = logg.curr_insertion_cnt - (last_seen_index + 1);
 		// cout << "curr insertion is: " << logg.curr_insertion_cnt << endl;
-		// cout << "last seen: " << last_seen_pred << endl;
+		// cout << "last seen: " << last_seen_index << endl;
 		// cout << "diff was " << diff << endl;
 		
 		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
 			// cout << "fallback " << diff << " : " << sqrt_n << endl;
 			// cout << "went to calculate bibfs3" << endl;
+
 			return calculate_bibfs(u, v); //maybe we can run 
 		}
-		// cout << "lcs is: " << last_seen_pred << endl;
+		
+		// cout << "lcs is: " << last_seen_index << endl;
 		return calculate_pred_permuted(u, v);
 	}
 
@@ -705,8 +711,15 @@ public:
 		uint32_t u, v;
 		u = op.arguments.first;
 		v = op.arguments.second;
-		// if (bottle_neck[u][v] <= curr_timestamp)
-		// 	return true;
+		if (bottle_neck[u][v] <= curr_timestamp){
+			return true;
+		}
+		// else{
+		// 	if (u == 3 && v == 105){
+		// 		cout << "bottle neck of 3 105 is " << bottle_neck[u][v] << endl;
+		// 		exit(0);
+		// 	}
+		// }
 		//i think we have to revisit this: it's not necessarily true (bottle neck is calculated with permuted insertions and not the real ones)
 		//i commented it for now
 
@@ -716,7 +729,9 @@ public:
 		// }
 		// cout << "answering query = " << op.arguments.first << " " <<
 		// op.arguments.second << " -- " << op.timestamp << endl;
-		
+		// bool ans = calculate_pred(u, v); 
+		// cout << "Query " << u << " " << v << " result: " << ans << endl;
+		// return ans;
 		return calculate_pred(u, v);
 	}
 
@@ -732,42 +747,48 @@ private:
 	vector<vector<int64_t>> bottle_neck;
 
 	size_t sqrt_n;
-	int last_seen_pred;
+	int last_seen_index = -1; //is the index of the last seen element (starting from 0)
 	int64_t curr_timestamp = -1;
 
-	const vector<Operation>::iterator find_pred (Operation& x){
+	bool has_op (const Operation& x, 
+				const vector<Operation>::iterator start,
+				const vector<Operation>::iterator end){
 		// cout << "~~~~~~~~~~~~~~~PRED INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
 		// for (auto x : pred_insertions)
 		// 	x.print();
-		for (auto i = unpredicted_insertions.begin(); i < unpredicted_insertions.end(); i++){
+		for (auto i = start; i < end; i++){
 			// cout << "checking insertion*"; i->print();
 			if (i->arguments.first == x.arguments.first 
 				&& i->arguments.second == x.arguments.second 
 				&& i->is_query == x.is_query)
-				return i;
+				return true;
 		}
-		return unpredicted_insertions.end(); //fix this diff is not updating!!!
+		return false;
 	}
 	void update_lcs() { //returns the first position predicted wrong
-		// cout << "last_seen_pred is: " << last_seen_pred << endl;
+		// cout << "last_seen_index is: " << last_seen_index << endl;
 		// cout << "curr insertion cnt is: " << logg.curr_insertion_cnt << endl;
-		while (last_seen_pred < logg.curr_insertion_cnt){
-			auto it = find_pred(pred_insertions[last_seen_pred + 1]);
-			if (it != unpredicted_insertions.end()){
-				// cout << "have found "; pred_insertions[last_seen_pred + 1].print();
-				unpredicted_insertions.erase(it);
-				last_seen_pred++;
-			}
-			else
-				break;
+		int temp_it = last_seen_index + 1;
+		while (temp_it < logg.curr_insertion_cnt){
+			//verifying if sub array [last_seen_index + 1, temp_it] is eligible
+			bool pred_in_real = has_op(pred_insertions[temp_it],
+								real_insertions.begin() + last_seen_index + 1, 
+								real_insertions.begin() + logg.curr_insertion_cnt);
+			bool real_in_pred = has_op(real_insertions[temp_it],
+								pred_insertions.begin() + last_seen_index + 1, 
+								pred_insertions.begin() + logg.curr_insertion_cnt);
+			if (pred_in_real && real_in_pred)
+				last_seen_index = temp_it; 
+			temp_it ++;
 		}
-		// cout << "did not find ";  pred_insertions[last_seen_pred + 1].print();
+		// cout << "did not find ";  pred_insertions[last_seen_index + 1].print();
+		// cout << "last seen is" << last_seen_index << endl;
 		// exit(0);
 	}
 
 	bool calculate_pred_permuted(const uint32_t s, const uint32_t t){
 		if ((int)real_insertions.size() != logg.curr_insertion_cnt ||
-			(int)real_insertions.size() <= last_seen_pred){
+			(int)real_insertions.size() <= last_seen_index){
 			cerr << real_insertions.size() << " " << logg.curr_insertion_cnt << endl;
 			cerr << "expected more real insertions" << endl;
 			exit(0);
@@ -778,10 +799,14 @@ private:
 		// }
 
 		vector<ui_pair> nodes = {make_pair(s, s), make_pair(t, t)};
-		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_pred + 1) + 2; // slightly faster
+		size_t nodes_s = logg.curr_insertion_cnt - (last_seen_index + 1) + 2; // slightly faster
 		// cout << "#out of order edges were: " << nodes_s << endl;
-		for (size_t i = 2; i < nodes_s; i++)
-			nodes.push_back(real_insertions[last_seen_pred + i - 1].arguments);
+		for (size_t i = 2; i < nodes_s; i++){
+			nodes.push_back(real_insertions[last_seen_index + i - 1].arguments);
+					if (s == 3 && t == 105){
+						cout << "mini dfs edges: "; real_insertions[last_seen_index + i - 1].print();
+					}
+		}
 		mini_dfs dfs(nodes_s * 2 - 2);
  		for (uint32_t i = 0; i < nodes_s; i++){
 			for (uint32_t j = 0; j < nodes_s; j++){
@@ -794,6 +819,18 @@ private:
 					dfs.add_edge(i, j);
 				}
 			}
+		}
+
+		if (s == 3 && t == 105){
+			cout << "ho" << endl;
+			cout << bottle_neck[3][49] << endl;
+			cout << bottle_neck[49][139] << endl;
+			cout << bottle_neck[139][96] << endl;
+			cout << bottle_neck[96][36] << endl;
+			cout << bottle_neck[36][177] << endl;
+			cout << bottle_neck[177][105] << endl;
+
+			exit(0);
 		}
 		return dfs.answer_query(0, 1);
 
