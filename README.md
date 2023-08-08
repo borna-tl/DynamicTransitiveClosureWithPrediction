@@ -48,8 +48,8 @@ vertices for our edge insertions (sequentially), and *t* is the timestamp.
 The timestamps are non-decreasing and by setting *-qt*, you can specify the timestamp
 for our initial graph (i.e. edge insertions before *qt* make up the initial graph).
 After we have generated our initial graph, by *-qp* chance, there will be a
-query operation after each insertion. The query operations are generated randomly
-over all the vertices.
+query operation after each operation (i.e. query or insertion).
+The query operations are generated randomly over all the vertices.
 
 ## Log
 
