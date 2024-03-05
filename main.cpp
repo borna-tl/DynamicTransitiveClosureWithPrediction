@@ -742,7 +742,7 @@ private:
 	int last_seen_index = -1; //is the index of the last seen element (starting from 0)
 	int64_t curr_timestamp = -1;
 
-	bool has_op (const Operation& x, 
+	bool has_op(const Operation& x, 
 				const vector<Operation>::iterator start,
 				const vector<Operation>::iterator end){
 		
@@ -881,7 +881,7 @@ private:
 
 	}
 
-	void set_t(){
+	void set_t(){ //t[u][v] when edge (u, v) will be inserted
 		uint32_t u, v;
 		for (const auto &x: pred_insertions){
 			u = x.arguments.first;
@@ -891,7 +891,7 @@ private:
 		}
 	}
 
-	void calculate_d(){
+	void calculate_d(){ //calculate D[u][v] = bottle_neck (last edge addition) of earlieast u->v path
 		insertion_time = new list<ui_pair> [setting.nodes];
 		bottle_neck.assign(setting.nodes, vector<int64_t>());
 		set_t();
@@ -902,17 +902,9 @@ private:
 			}
 		}
 		
-		// for (size_t i = 0; i < insertion_operations.size(); i++){
-		// 	cout << operations[i].is_query << "|" << operations[i].arguments.first << " " <<
-		// 	operations[i].arguments.second << " @ " << 
-		// 	operations[i].timestamp << " ----- " <<
-		// 	operations_permuted[i].is_query << "|" << operations_permuted[i].arguments.first << " " <<
-		// 	operations_permuted[i].arguments.second << " @ " << 
-		// 	operations_permuted[i].timestamp << endl;
-		// 	if (operations[i].arguments.first != operations_permuted[i].arguments.first)
-		// 		cout << endl << endl;
-		// }
-		
+		for (size_t i = 0; i < logg.insertion_operations_cnt; i++){
+			pred_insertions[i].print();
+		}
 		
 		
 		delete[] insertion_time; //return and dynamic pointer later
@@ -1012,7 +1004,7 @@ private:
 		out_edge[op.arguments.first].push_back(op.arguments.second);
 		in_edge[op.arguments.second].push_back(op.arguments.first);
 		real_insertions.push_back(op);
-		unpredicted_insertions.push_back(op);
+		unpredicted_insertions.push_back(op); //seems redundant ??
 		// if (op.arguments.first == 883 && op.arguments.second == 658)
 		// 	cout << "ITS HERE BOY" << endl; //delete for debug
 		curr_timestamp = max(curr_timestamp, op.timestamp);
@@ -1243,7 +1235,7 @@ private:
 	vector<Operation> insertion_operations;
 	vector<Operation> insertion_operations_permuted;
 	vector<Operation> operations;
-	vector<Operation> operations_permuted;
+	vector<Operation> operations_permuted; //seems redundant
 
 	void convert_input() {
 		
@@ -1310,50 +1302,55 @@ private:
 
 
 		insertion_operations_permuted.resize((int)logg.insertion_operations_cnt);
-		bool filled [logg.insertion_operations_cnt]; //use = {0}
+		// bool filled [logg.insertion_operations_cnt]; //use = {0}
+		multimap <int, int> new_order;
 		for (int i = 0; i < (int)logg.insertion_operations_cnt ; i++){
-			filled[i] = false;
+			// filled[i] = false;
 			insertion_operations_permuted[i].reset();
 		}
+		insertion_operations_permuted = insertion_operations;
 		// uint32_t dif_sum = 0;
 		// int hash [10000] = {0};
-		int i, j;
-		for (i = 0; i < (int)logg.insertion_operations_cnt - 10; i += 10){ //batch size
-			for (j = 0; j < 10; j++){
+		int i;
+		// for (i = 0; i < (int)logg.insertion_operations_cnt - 10; i += 10){ //batch size
+		for (i = 0; i < (int)logg.insertion_operations_cnt; i ++){ 
+			// for (j = 0; j < 10; j++){
 				int noise = round(distribute(generator));
-				if (noise >= 10 || noise < 0){
-					noise = mod(noise, 10);
-					//probably can observe and gather stats later
-				}
-				int new_noise = +noise - 1; //for do-while loop
-				int new_noise_rev = -noise + 1; //for do-while loop
-				do {
-					new_noise ++;
-					new_noise_rev --;
-					if (j + new_noise < 0)
-						new_noise += 10;
-					else if (j + new_noise >= 10)
-						new_noise -= 10;
-					if (j + new_noise_rev < 0)
-						new_noise_rev += 10;
-					else if (j + new_noise_rev >= 10)
-						new_noise_rev -= 10;
-					// if (j + new_noise >= 10){
-					// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
-				}
-				while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
+				int new_index = i + noise;
+				new_order.insert({new_index, i});
+				// if (noise >= 10 || noise < 0){
+				// 	noise = mod(noise, 10);
+				// 	//probably can observe and gather stats later
+				// }
+				// int new_noise = +noise - 1; //for do-while loop
+				// int new_noise_rev = -noise + 1; //for do-while loop
+				// do {
+				// 	new_noise ++;
+				// 	new_noise_rev --;
+				// 	if (j + new_noise < 0)
+				// 		new_noise += 10;
+				// 	else if (j + new_noise >= 10)
+				// 		new_noise -= 10;
+				// 	if (j + new_noise_rev < 0)
+				// 		new_noise_rev += 10;
+				// 	else if (j + new_noise_rev >= 10)
+				// 		new_noise_rev -= 10;
+				// 	// if (j + new_noise >= 10){
+				// 	// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+				// }
+				// while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
 				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
-				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
-					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
-						cerr << "we have a problem 1" << endl; //for debugging
-						exit(0);
-				}
-				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
-				// insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
-				insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
-				insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
-				insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
-				insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
+				// if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
+				// 	&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
+				// 		cerr << "we have a problem 1" << endl; //for debugging
+				// 		exit(0);
+				// }
+				// new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
+				// // insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
+				// insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
+				// insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
+				// insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
+				// insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
 
 				// swap(insertion_operations_permuted[i + j + new_noise].arguments.first,
 				// 		insertion_operations[i + j].arguments.first);
@@ -1363,65 +1360,72 @@ private:
 				// cout << "filled " << i + j + new_noise << endl;
 				// cout << "with: " << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
 
-				filled[i + j + new_noise] = true;
+				// filled[i + j + new_noise] = true;
 				// dif_sum += abs(int(new_noise - i));
 				// if (abs(int(new_noise - i)) == 1004)
 				// 	cout << "hesam: " << new_noise << " " << i << endl;
 				// hash[abs(int(new_noise - i))]++;
-			}
 		}
-		int batch_size = logg.insertion_operations_cnt - i;
-		if (batch_size){
-			for (j = 0; j < batch_size; j++){
-				int noise = round(distribute(generator));
-				if (noise >= batch_size || noise < 0){
-					noise = mod(noise, batch_size);
-					//probably can observe and gather stats later
-				}
-				int new_noise = +noise - 1; //for do-while loop
-				int new_noise_rev = -noise + 1; //for do-while loop
-				do {
-					new_noise ++;
-					new_noise_rev --;
-					if (j + new_noise < 0)
-						new_noise += batch_size;
-					else if (j + new_noise >= batch_size)
-						new_noise -= batch_size;
-					if (j + new_noise_rev < 0)
-						new_noise_rev += batch_size;
-					else if (j + new_noise_rev >= batch_size)
-						new_noise_rev -= batch_size;
-					// if (j + new_noise >= 10){<< endl; exit(0);} 
-					// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
-				}
-				while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
-				// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
-				if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
-					&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
-						cerr << "we have a problem 2" << endl; //for debugging
-						exit(0);
-				}
-				new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
-				// insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
-				insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
-				insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
-				insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
-				insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
+		cout << "Iterating MAp" << endl;
+		i = 0;
+		for (auto x : new_order){ 
+			insertion_operations_permuted[i].arguments.first = insertion_operations[x.second].arguments.first;
+			insertion_operations_permuted[i].arguments.second = insertion_operations[x.second].arguments.second;
+			i++;
 
-				// swap(insertion_operations_permuted[i + j + new_noise].arguments.first,
-				// 		insertion_operations[i + j].arguments.first);
-				// swap(insertion_operations_permuted[i + j + new_noise].arguments.second,
-				// 		insertion_operations[i + j].arguments.second);
+			cout << x.first << " " << x.second << endl;
+		// int batch_size = logg.insertion_operations_cnt - i;
+		// if (batch_size){
+		// 	for (j = 0; j < batch_size; j++){
+		// 		int noise = round(distribute(generator));
+		// 		if (noise >= batch_size || noise < 0){
+		// 			noise = mod(noise, batch_size);
+		// 			//probably can observe and gather stats later
+		// 		}
+		// 		int new_noise = +noise - 1; //for do-while loop
+		// 		int new_noise_rev = -noise + 1; //for do-while loop
+		// 		do {
+		// 			new_noise ++;
+		// 			new_noise_rev --;
+		// 			if (j + new_noise < 0)
+		// 				new_noise += batch_size;
+		// 			else if (j + new_noise >= batch_size)
+		// 				new_noise -= batch_size;
+		// 			if (j + new_noise_rev < 0)
+		// 				new_noise_rev += batch_size;
+		// 			else if (j + new_noise_rev >= batch_size)
+		// 				new_noise_rev -= batch_size;
+		// 			// if (j + new_noise >= 10){<< endl; exit(0);} 
+		// 			// cout << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+		// 		}
+		// 		while (filled[i + j + new_noise] && filled[i + j + new_noise_rev]);
+		// 		// new_noise = !filled[i + j + new_noise] ? new_noise : new_noise_rev;
+		// 		if (insertion_operations_permuted[i + j + new_noise].timestamp != 0
+		// 			&& insertion_operations_permuted[i + j + new_noise_rev].timestamp != 0){
+		// 				cerr << "we have a problem 2" << endl; //for debugging
+		// 				exit(0);
+		// 		}
+		// 		new_noise = insertion_operations_permuted[i + j + new_noise].timestamp == 0 ? new_noise : new_noise_rev;
+		// 		// insertion_operations_permuted[i + j + new_noise] = insertion_operations[i + j + new_noise];
+		// 		insertion_operations_permuted[i + j + new_noise].arguments.first = insertion_operations[i + j].arguments.first;
+		// 		insertion_operations_permuted[i + j + new_noise].arguments.second = insertion_operations[i + j].arguments.second;
+		// 		insertion_operations_permuted[i + j + new_noise].is_query = insertion_operations[i + j].is_query;
+		// 		insertion_operations_permuted[i + j + new_noise].timestamp = insertion_operations[i + j + new_noise].timestamp;
 
-				// cout << "filled " << i + j + new_noise << endl;
-				// cout << "with: " << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+		// 		// swap(insertion_operations_permuted[i + j + new_noise].arguments.first,
+		// 		// 		insertion_operations[i + j].arguments.first);
+		// 		// swap(insertion_operations_permuted[i + j + new_noise].arguments.second,
+		// 		// 		insertion_operations[i + j].arguments.second);
 
-				filled[i + j + new_noise] = true;
-				// dif_sum += abs(int(new_noise - i));
-				// if (abs(int(new_noise - i)) == 1004)
-				// 	cout << "hesam: " << new_noise << " " << i << endl;
-				// hash[abs(int(new_noise - i))]++;
-			}	
+		// 		// cout << "filled " << i + j + new_noise << endl;
+		// 		// cout << "with: " << i << " " << j << " " << new_noise << " " << new_noise_rev << endl;
+
+		// 		filled[i + j + new_noise] = true;
+		// 		// dif_sum += abs(int(new_noise - i));
+		// 		// if (abs(int(new_noise - i)) == 1004)
+		// 		// 	cout << "hesam: " << new_noise << " " << i << endl;
+		// 		// hash[abs(int(new_noise - i))]++;
+		// 	}	
 		}
 	}
 	
