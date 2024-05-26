@@ -5,6 +5,12 @@
 #include <queue>
 #include <sstream>
 #include <string>
+#include <bitset>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 
 using namespace std;
 using u32 = uint_least32_t;
@@ -16,6 +22,21 @@ typedef pair <uint32_t, uint32_t> ui_pair;
 #define PROGRESS_STAMP 10 // define the progress bar count
 #define PBSTR "++++++++++++++++++++++++++++++++++++++++++++++++++"
 #define PBWIDTH 50
+
+
+int64_t search_time = 0;
+int64_t clear_reserve_time = 0;
+int64_t emplace_time = 0;
+int64_t building_minidfs_time = 0;
+int64_t update_lcs_time = 0;
+int64_t adding_minidfs_nodes = 0;
+int64_t declaring_minidfs = 0;
+int64_t minidfs_first_edge_set = 0;
+int64_t minidfs_second_edge_set = 0;
+
+
+
+
 
 // add std::
 // maybe use static inline?
@@ -93,18 +114,31 @@ struct Setting {
 
 struct Operation {
 	Operation(){};
+	~Operation(){};
 	Operation(const bool is_query_, const pair<uint32_t, uint32_t> arguments_,
 			  const int64_t timestamp_)
 		: is_query(is_query_), arguments(arguments_), timestamp(timestamp_) {}
+	
+	Operation(const Operation &op) {
+		is_query = op.is_query;
+		arguments = op.arguments;
+		timestamp = op.timestamp;
 
-	bool operator == (const Operation& p) const {
+	} 
+
+	bool const operator == (const Operation& p) const {
    		return is_query == p.is_query
 		&& arguments.first == p.arguments.first
 		&& arguments.second == p.arguments.second
 		&& timestamp == p.timestamp;
 	}
 
-	void print(){
+    bool const operator < (const Operation &p) const {
+        return arguments.first < p.arguments.first || (arguments.first == p.arguments.first 
+		&& arguments.second < p.arguments.second);
+    }
+
+	void const print() const {
 		cout << ((is_query == true) ? "Query" : "Ins") << "| (" << arguments.first
 				<< ", " << arguments.second << ") @ " << timestamp << endl;
 	}
@@ -402,7 +436,14 @@ public:
 	void add_edge(const uint32_t u, const uint32_t v) {
 		out_edge[u].push_back(v);
 	}
-
+	void print_edges(){
+		for (uint32_t i = 0; i < out_edge.size(); i++){
+			cout << "for node: " << i << endl;
+			for (uint32_t j = 0; j < out_edge[i].size(); j++)
+				cout << out_edge[i][j] << " ";
+			cout << endl;
+		}
+	}
 private:
 	vector<bool> visited_dfs;
 	vector<vector<uint32_t>> out_edge;
@@ -517,7 +558,7 @@ public:
 			generated_sv = true;
 		}
 		bool ans = calculate_sv(op.arguments.first, op.arguments.second);
-		cout << "Query " << op.arguments.first << " " << op.arguments.second << "`" << op.timestamp<< " result: " << ans << endl;		
+		// cout << "Query " << op.arguments.first << " " << op.arguments.second << "`" << op.timestamp<< " result: " << ans << endl;		
 		return ans;
 		// return calculate_sv(op.arguments.first, op.arguments.second);
 
@@ -664,6 +705,24 @@ private:
 	}
 };
 
+
+struct MyHash {
+  std::size_t operator()(const Operation& k) const { //contemplate on the hash strategy
+	return std::hash<std::uint32_t>()(k.arguments.first) ^
+            (std::hash<std::uint32_t>()(k.arguments.second) << 1);
+	// return std::hash<std::uint32_t>()(k.arguments.first) +
+    //         (std::hash<std::uint32_t>()(k.arguments.second) << 1);
+  }
+};
+
+struct MyEqual {
+  bool operator()(const Operation& lhs, const Operation& rhs) const {
+	    return lhs.is_query == rhs.is_query
+		&& lhs.arguments.first == rhs.arguments.first
+		&& lhs.arguments.second == rhs.arguments.second; //deleted timestamps because they are different in pred and real
+  }
+};
+
 class Pred : public Algorithms {
 
 public:
@@ -674,30 +733,48 @@ public:
 		visited_bibfs_sink.resize(setting.nodes, false);
 		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
 		last_seen_index = -1;
+
+		auto started = std::chrono::high_resolution_clock::now();
+		indices_in_pred.clear();
+		indices_in_pred.reserve(logg.insertion_operations_cnt);
+		clear_reserve_time += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
+
+		inserted.resize(logg.insertion_operations_cnt);
+		for (size_t i = 0; i < logg.insertion_operations_cnt; i++){
+			auto started = std::chrono::high_resolution_clock::now();
+
+			auto result = indices_in_pred.try_emplace(pred_insertions[i], i);
+			emplace_time += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
+			
+			if (result.second == false)
+				inserted[i] = true;
+			else
+				inserted[i] = false;
+		}
+
 	}
 	void preheat() {
 		calculate_d();
-		// cout << "calculated d" << endl;
-	}
-	void reset(){
-		visited_bibfs_source.resize(setting.nodes, false);
-		visited_bibfs_sink.resize(setting.nodes, false);
-		
-		sqrt_n = sqrt(setting.nodes + pred_insertions.size()); // |V| + |E|
-		last_seen_index = -1;
-		real_insertions.clear();
-		logg.reset();
 	}
 
 	bool calculate_pred(const uint32_t u, const uint32_t v) {
+
+		auto started = std::chrono::high_resolution_clock::now();
 		update_lcs(); //update last seen insertion position
-		size_t diff = logg.curr_insertion_cnt - (last_seen_index + 1);
-		// cout << "AT time stamp = " << curr_timestamp << " last seen index was" << last_seen_index << endl;		
-		
+		update_lcs_time += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
+
+		int diff = logg.curr_insertion_cnt - (last_seen_index + 1);
+		// cout << "AT time stamp = " << curr_timestamp << " last seen index was" << last_seen_index 
+		//  << "and diff was " << diff << endl;		
 		if (diff > sqrt_n) { //either run bibfs with O(|E| + |V|) or pred with diff^2 
 			// cout << "fallback " << diff << " : " << sqrt_n << endl;
-			// cout << "went to calculate bibfs3" << endl;
-
+			// cout << "!Warning falling back to BiBFS. Curr insertion: " << logg.curr_insertion_cnt << " LSI: " << last_seen_index << endl;
 			return calculate_bibfs(u, v); //maybe we can run 
 		}
 		
@@ -709,8 +786,11 @@ public:
 		uint32_t u, v;
 		u = op.arguments.first;
 		v = op.arguments.second;
-		// if (bottle_neck[u][v] <= curr_timestamp){
-		// 	return true;
+
+		//makes it really fast!
+		if (bottle_neck[u][v] <= curr_timestamp){ //what if we have multiple same insertion in one cycle?
+			return true;
+		}
 		//i think we have to revisit this: it's not necessarily true (bottle neck is calculated with permuted insertions and not the real ones)
 		//i commented it for now
 
@@ -730,15 +810,17 @@ public:
 private:
 	vector<bool> visited_bibfs_source;
 	vector<bool> visited_bibfs_sink;
-	vector<Operation>& pred_insertions;
-	vector<Operation> real_insertions;
-	vector<Operation> unpredicted_insertions;
-
+	vector<Operation>& pred_insertions; //(u, (v, timestamp))
+	// map <Operation, uint32_t> indices_in_pred;
+	unordered_map <Operation, std::uint32_t, MyHash, MyEqual> indices_in_pred;  //(42, MyHash(), MyEqual()); //check if operation could be operation&
+	vector <bool> inserted;
+	set <int> edges_for_dfs;
+	// vector<Operation> real_insertions;
 
 	list<ui_pair>* insertion_time;
 	vector<vector<int64_t>> bottle_neck;
 
-	size_t sqrt_n;
+	int sqrt_n;
 	int last_seen_index = -1; //is the index of the last seen element (starting from 0)
 	int64_t curr_timestamp = -1;
 
@@ -747,7 +829,6 @@ private:
 				const vector<Operation>::iterator end){
 		
 		for (auto i = start; i < end; i++){
-			// cout << "checking insertion*"; i->print();
 			if (i->arguments.first == x.arguments.first 
 				&& i->arguments.second == x.arguments.second 
 				&& i->is_query == x.is_query)
@@ -756,70 +837,14 @@ private:
 		return false;
 	}
 	void update_lcs() { //returns the first position predicted wrong
-		// cout << "last_seen_index is: " << last_seen_index << endl;
-		// cout << "curr insertion cnt is: " << logg.curr_insertion_cnt << endl;
-
-		// set<ui_pair> pred_edges, real_edges;
-		vector<ui_pair> pred_edges, real_edges;
-
-		for (int i = last_seen_index + 1; i < logg.curr_insertion_cnt; i++){
-			pred_edges.push_back(pred_insertions[i].arguments);
-			real_edges.push_back(real_insertions[i].arguments);
+		while (inserted[last_seen_index + 1] == true){
+			last_seen_index++;
+			edges_for_dfs.erase(last_seen_index);
 		}
-		// cout << "pred edges size is" << pred_edges.size() << endl;
-		// int i = last_seen_index + 1, max_lcs = 0;
-		size_t i = 1, max_lcs = 0;
-		// while (i < logg.curr_insertion_cnt){
-		while (i < pred_edges.size()){	
-			sort(pred_edges.begin(), pred_edges.begin() + i); //we can keep a new sorted data structure (set)
-			sort(real_edges.begin(), real_edges.begin() + i);
-			
-			// pred_edges.insert(pred_insertions[i].arguments);
-			// real_edges.insert(real_insertions[i].arguments);
-
-			size_t j = 0;
-			while (j < i){ 
-				if (pred_edges[j] != real_edges[j])
-					break;
-				j++;
-			}
-			// if (pred_edges == real_edges)
-			if (j == i)
-				max_lcs = max(max_lcs, i);
-				// max_lcs = max(max_lcs, i - last_seen_index);
-
-			i++;
-		}
-		last_seen_index += max_lcs;
-		// int temp_it = last_seen_index + 1;
-		// while (temp_it < logg.curr_insertion_cnt){
-		// 	//verifying if sub array [last_seen_index + 1, logg.curr_insertion_cnt] is eligible
-		// 	bool pred_in_real = has_op(pred_insertions[temp_it],
-		// 						real_insertions.begin() + last_seen_index + 1, 
-		// 						real_insertions.begin() + logg.curr_insertion_cnt);
-		// 	bool real_in_pred = has_op(real_insertions[temp_it],
-		// 						pred_insertions.begin() + last_seen_index + 1, 
-		// 						pred_insertions.begin() + logg.curr_insertion_cnt);
-		// 	if (pred_in_real && real_in_pred){
-		// 		last_seen_index = temp_it; 
-		// 	}
-		// 	else{
-		// 		return temp_it;
-		// 	}
-		// 	temp_it ++;
-		// }
-		// return temp_it;
-		// cout << "last seen is" << last_seen_index << endl;
-		// exit(0);
 	}
 
 	bool calculate_pred_permuted(const uint32_t s, const uint32_t t){
-		if ((int)real_insertions.size() != logg.curr_insertion_cnt ||
-			(int)real_insertions.size() <= last_seen_index){
-			cerr << real_insertions.size() << " " << logg.curr_insertion_cnt << endl;
-			cerr << "expected more real insertions" << endl;
-			exit(0);
-		}
+		
 		//debugging: do we really need this?
 		// if (logg.curr_insertion_cnt == 0){ 
 		// 	return calculate_bibfs(s, t);
@@ -828,55 +853,79 @@ private:
 		// cout << "#out of order edges were: " << nodes_s << endl;
 
 		//check if it should be <= curr_insertion_cnt
-		for (int64_t i = last_seen_index + 1; i < logg.curr_insertion_cnt; i++){
-			nodes.push_back(real_insertions[i].arguments);
-			// if (s == 110 && t == 25){
-			// 	cout << "did not see and are adding1 "; real_insertions[i].print();
-			// }
+
+		auto started = std::chrono::high_resolution_clock::now();
+
+		for (auto x : edges_for_dfs){
+			nodes.push_back(pred_insertions[x].arguments);
+			
 		}
 		size_t nodes_s = nodes.size();
-		// mini_dfs dfs(2 * nodes_s - 2);
+		adding_minidfs_nodes += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
+		// mini_dfs dfs(2 * nodes_s - 2); 
 
+		auto started1 = std::chrono::high_resolution_clock::now();
 		mini_dfs dfs(nodes_s); //use bfs instead and implement here
 
-		if (bottle_neck[nodes[0].second][nodes[1].first] <= last_seen_index + 1){
-			// cout << "TAKING SHORTCUT" << bottle_neck[nodes[0].second][nodes[1].first] << endl;
-			return true;
-		}
-		
+		// cout << "built a dfs with " << nodes_s << " nodes" << endl;
+
+		//i think this is buggy. delete it?
+		// if (bottle_neck[nodes[0].second][nodes[1].first] <= last_seen_index + 1){
+		// 	// cout << "TAKING SHORTCUT" << bottle_neck[nodes[0].second][nodes[1].first] << endl;
+		// 	return true;
+		// }
+		declaring_minidfs += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started1)
+								  .count();
+		auto started2 = std::chrono::high_resolution_clock::now();
+
 		for (uint32_t i = 2; i < nodes_s; i++){
 			uint32_t start, end;				
 			start = nodes[0].second;
 			end = nodes[i].first;
 			// dfs.add_edge(2 * i - 2, 2 * i - 1); //for each edge in nodes
 			// cout << "added edge (" << nodes[i].first << " " << nodes[i].second << endl;
-			if (bottle_neck[start][end] <= last_seen_index + 1){ //almost sure this should be lsi
+			if (bottle_neck[start][end] <= curr_timestamp){
 				dfs.add_edge(0, i);
-				// dfs.add_edge(0, 2 * i - 2);
 
 			}
 			start = nodes[i].second;
 			end = nodes[1].first;
-			if (bottle_neck[start][end] <= last_seen_index + 1){
+			if (bottle_neck[start][end] <= curr_timestamp){
 				dfs.add_edge(i, 1);
-				// dfs.add_edge(2 * i - 1, 1);
 			}
 		}
- 		for (uint32_t i = 2; i < nodes_s; i++){
+		minidfs_first_edge_set += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started2)
+								  .count();
+
+		auto started3 = std::chrono::high_resolution_clock::now();
+
+ 		for (uint32_t i = 0; i < nodes_s; i++){
 				// dfs.add_edge(2 * i - 2, 2 * i - 1);
-			for (uint32_t j = 2; j < nodes_s; j++){
+			for (uint32_t j = 0; j < nodes_s; j++){
 				if (j == i)
 					continue;
 				uint32_t start, end;				
 				start = nodes[i].second;
 				end = nodes[j].first;
-				if (bottle_neck[start][end] <= curr_timestamp){ //check if it should be lcs
+				if (bottle_neck[start][end] <= curr_timestamp){
 					// dfs.add_edge(2 * i - 1, 2 * j - 2);
 					dfs.add_edge(i, j);
 				}
 				
 			}
 		}
+
+		minidfs_second_edge_set += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started3)
+								  .count();
+
+		building_minidfs_time += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
 		return dfs.answer_query(0, 1);
 
 	}
@@ -887,7 +936,6 @@ private:
 			u = x.arguments.first;
 			v = x.arguments.second;
 			insertion_time[u].push_back(make_pair(v, x.timestamp));
-			// cout << "pred insertions: " << u << " " << v << endl;
 		}
 	}
 
@@ -902,9 +950,9 @@ private:
 			}
 		}
 		
-		for (size_t i = 0; i < logg.insertion_operations_cnt; i++){
-			pred_insertions[i].print();
-		}
+		// for (size_t i = 0; i < logg.insertion_operations_cnt; i++){
+		// 	pred_insertions[i].print();
+		// }
 		
 		
 		delete[] insertion_time; //return and dynamic pointer later
@@ -955,7 +1003,7 @@ private:
 
 
 	bool calculate_bibfs(const uint32_t u, const uint32_t v) {
-		bool found_path = false;
+		bool found_path = (u == v); //for special case where u and v are the same
 		uint32_t curr_node;
 		vector<uint32_t> source_queue, sink_queue;
 		size_t source_pointer = 0;
@@ -1003,10 +1051,19 @@ private:
 	void add_edge(const Operation& op) {
 		out_edge[op.arguments.first].push_back(op.arguments.second);
 		in_edge[op.arguments.second].push_back(op.arguments.first);
-		real_insertions.push_back(op);
-		unpredicted_insertions.push_back(op); //seems redundant ??
-		// if (op.arguments.first == 883 && op.arguments.second == 658)
-		// 	cout << "ITS HERE BOY" << endl; //delete for debug
+		// cout << "add edge: op is ";
+		// op.print();
+		
+		auto started = std::chrono::high_resolution_clock::now();
+		uint32_t index = indices_in_pred[op];
+		search_time += chrono::duration_cast<std::chrono::nanoseconds>(
+								  chrono::high_resolution_clock::now() - started)
+								  .count();
+			
+		if (inserted[index] != true) {
+			inserted[index] = true;
+			edges_for_dfs.insert(index);
+		}
 		curr_timestamp = max(curr_timestamp, op.timestamp);
 	}
 };
@@ -1137,30 +1194,31 @@ public:
 			unique_ptr<Pred> pred;
 			permute_insertions(i);
 
-			// uncomment (and mofify a bit) to run on single permutation preheat multiple times
-			// if (pred != nullptr){ 
-			// 	cout << "already preheated!" << endl;
-			// 	pred->reset();
-			// }
-			// else {
-				// generate_operations(insertion_operations_permuted, operations_permuted);
-				pred = unique_ptr<Pred>(new Pred(setting, logg, insertion_operations_permuted));
-				pred->preheat();
-			// }
-
-			// cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS~~~~~~~~~~~~~" << endl;
+			// cout << "OPERATIONS\n\n" << endl;
 			// for (auto x : insertion_operations)
 			// 	x.print();
-			// cout << "~~~~~~~~~~~~~~~INSERTION OPERATIONS PERMUTED ~~~~~~~~~~~~~" << endl;
+			// cout << "PERMUTED OPERATIONS\n\n" << endl;
 			// for (auto x : insertion_operations_permuted)
 			// 	x.print();
-			// exit(0);
+			// cout << "\n\n";
+			pred = unique_ptr<Pred>(new Pred(setting, logg, insertion_operations_permuted));
+			pred->preheat();			
 
 			pred->run(operations);
 			logg.run_durations.push_back(logg.query_durations.back() +
 										 logg.insertion_durations.back());
 		}
 		set_time(logg.end_time);
+		// cout << "Search time: " << search_time << endl <<
+		// "Clear and Reserve time: " << clear_reserve_time << endl <<
+		// "Emplace time:" << emplace_time << endl <<
+		// "LCS time:" << update_lcs_time << endl <<
+		// "Adding Minidfs nodes:" << adding_minidfs_nodes << endl <<
+		// "Declaring Minidfs:" << declaring_minidfs << endl <<
+		// "Mini DFS 1st edge:" << minidfs_first_edge_set << endl <<
+		// "Mini DFS 2nd edge:" << minidfs_second_edge_set << endl <<
+		// "Building Mini DFS time:" << building_minidfs_time << endl;
+
 	}
 
 	void execute_reg() {
@@ -1228,14 +1286,12 @@ public:
 	}
 	
 	
-
 private:
 	Setting setting;
 	Logger logg;
 	vector<Operation> insertion_operations;
 	vector<Operation> insertion_operations_permuted;
-	vector<Operation> operations;
-	vector<Operation> operations_permuted; //seems redundant
+	vector<Operation> operations; //insertions or queries
 
 	void convert_input() {
 		
@@ -1296,36 +1352,28 @@ private:
 
 	void permute_insertions(uint32_t sv_seed) {
 		engine generator(sv_seed);
-		normal_distribution<double> distribute(0,3.0); //might have ro calibrate
+		normal_distribution<double> distribute(0, 3.0); //might have to calibrate
 
 		insertion_operations_permuted.resize((int)logg.insertion_operations_cnt);
-		multimap <int, int> new_order;
+		vector <pair<double, int>> new_order; 
 		for (int i = 0; i < (int)logg.insertion_operations_cnt ; i++){
 			insertion_operations_permuted[i].reset();
 		}
 		insertion_operations_permuted = insertion_operations;
+
 		int i;
-		for (i = 0; i < (int)logg.insertion_operations_cnt; i ++){ 
-			int noise = round(distribute(generator));
-			int new_index = i + noise;
-			new_order.insert({new_index, i});
+		for (i = 0; i < (int)logg.insertion_operations_cnt; i ++){
+			double noise = distribute(generator);
+			double new_index = i + noise;
+			new_order.push_back({new_index, i});
 		}
+		sort(new_order.begin(), new_order.end());
 		i = 0;
-		double diff = 0;
-		double d2 = 0;
 		for (auto x : new_order){ 
 			insertion_operations_permuted[i].arguments.first = insertion_operations[x.second].arguments.first;
 			insertion_operations_permuted[i].arguments.second = insertion_operations[x.second].arguments.second;
-			diff += abs(i - x.second);
-			d2 += (i - x.second) * (i - x.second);
 			i++;
-
-			cout << x.first << " " << x.second << endl;
-
 		}
-		cout << "total diff was " << diff << endl;
-		cout << "mean was " << (double)diff/(double)logg.insertion_operations_cnt << endl;
-		cout << "sd was " << sqrt(double(d2 / logg.insertion_operations_cnt)) << endl;
 	}
 	
 
