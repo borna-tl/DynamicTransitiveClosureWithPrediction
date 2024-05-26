@@ -11,3 +11,5 @@ samples
 build
 samples
 test
+gmon.out
+deletelater.cpp
