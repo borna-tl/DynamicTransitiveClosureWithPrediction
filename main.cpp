@@ -709,11 +709,20 @@ private:
 	}
 };
 
+namespace std {
+    template <>
+    struct hash<std::pair<uint32_t, uint32_t>> {
+        std::size_t operator()(const std::pair<uint32_t, uint32_t>& p) const {
+            return std::hash<uint32_t>()(p.first) ^ (std::hash<uint32_t>()(p.second) << 1);
+        }
+    };
+}
 
 struct MyHash {
   std::size_t operator()(const Operation& k) const { //contemplate on the hash strategy
-	return std::hash<std::uint32_t>()(k.arguments.first) ^
-            (std::hash<std::uint32_t>()(k.arguments.second) << 1);
+	return std::hash<std::pair<uint32_t, uint32_t>>()(k.arguments);
+	// return std::hash<std::uint32_t>()(k.arguments.first) ^
+    //         (std::hash<std::uint32_t>()(k.arguments.second) << 1);
 	// return std::hash<std::uint32_t>()(k.arguments.first) +
     //         (std::hash<std::uint32_t>()(k.arguments.second) << 1);
   }
