@@ -376,27 +376,6 @@ public:
 		return visited_dfs[v];
 	}
 
-	// bool calculate_dfs_with_path(const uint32_t u, const uint32_t v) {
-	// 	visited_dfs[u] = true;
-	// 	current_path.push_back(u);  // Add the current node to the path
-
-	// 	if (u == v) {
-	// 		found_path = current_path;  // Store the path if the destination is found
-	// 		return true;
-	// 	}
-
-	// 	for (const auto& i : out_edge[u]) {
-	// 		if (!visited_dfs[i]) {
-	// 			if (calculate_dfs(i, v)) {
-	// 				return true;  // If the destination is found in the recursion, return true
-	// 			}
-	// 		}
-	// 	}
-
-	// 	current_path.pop_back();  // Remove the current node from the path if not part of the final path
-	// 	return false;
-	// }
-
 	bool answer_query(const Operation& op) {
 		visited_dfs.assign(visited_dfs.size(), false);
 		return calculate_dfs(op.arguments.first, op.arguments.second);
@@ -704,17 +683,20 @@ class Pred : public Algorithms {
 
 public:
 	Pred(const Setting &setting_, Logger &logg_, vector<Operation>& pred_insertions_)
-			 : Algorithms(setting_, logg_), pred_insertions(pred_insertions_){
+			 : Algorithms(setting_, logg_){
 		
-
 		last_seen_index = -1;
+		pred_insertions.reserve(pred_insertions_.size());
+
+		for (auto x : pred_insertions_)
+			pred_insertions.push_back(x.arguments);
 
 		indices_in_pred.clear();
 		indices_in_pred.reserve(logg.insertion_operations_cnt);
 		inserted.resize(logg.insertion_operations_cnt);
 
 		for (size_t i = 0; i < logg.insertion_operations_cnt; i++){
-			auto result = indices_in_pred.try_emplace(pred_insertions[i].arguments.first*(int64_t)1e9+pred_insertions[i].arguments.second,
+			auto result = indices_in_pred.try_emplace(pred_insertions[i].first*(int64_t)1e9+pred_insertions[i].second,
 				i);			
 			
 			if (result.second == false){
@@ -733,7 +715,7 @@ public:
 		vector<ui_pair> nodes = {make_pair(u, u), make_pair(v, v)};
 
 		for (auto x : edges_for_dfs){
-			nodes.push_back(pred_insertions[x].arguments);
+			nodes.push_back(pred_insertions[x]);
 		}
 
 		size_t nodes_s = nodes.size();
@@ -775,7 +757,8 @@ public:
 
 private:
 	
-	vector<Operation>& pred_insertions; //(u, v) edit needed //change to pointer
+	// vector<Operation>& pred_insertions; //(u, v) edit needed //change to pointer
+	vector <ui_pair> pred_insertions;
 	unordered_map<int64_t, int32_t> indices_in_pred;
 	vector <bool> inserted;
 	unordered_set <int> edges_for_dfs;
@@ -796,7 +779,7 @@ private:
 		return false;
 	}
 	void update_lcs() { //returns the first position predicted wrong
-		while (inserted[last_seen_index + 1] == true){ //(u, v)
+		while (inserted[last_seen_index + 1] == true){ 
 			last_seen_index++;
 			edges_for_dfs.erase(last_seen_index);
 		}
@@ -805,8 +788,8 @@ private:
 	void set_t(){ //t[u][v] when edge (u, v) will be inserted
 		uint32_t u, v;
 		for (size_t i = 0; i < pred_insertions.size(); ++i) {
-			u = pred_insertions[i].arguments.first;
-			v = pred_insertions[i].arguments.second;
+			u = pred_insertions[i].first;
+			v = pred_insertions[i].second;
 			edge_insertion_time[u].push_back(make_pair(v, (uint32_t)i));
 		}
 	}
@@ -1017,16 +1000,6 @@ public:
 										 logg.insertion_durations.back());
 		}
 		set_time(logg.end_time);
-		// cout << "Search time: " << search_time << endl <<
-		// "Clear and Reserve time: " << clear_reserve_time << endl <<
-		// "Emplace time:" << emplace_time << endl <<
-		// "LCS time:" << update_lcs_time << endl <<
-		// "Adding Minidfs nodes:" << adding_minidfs_nodes << endl <<
-		// "Declaring Minidfs:" << declaring_minidfs << endl <<
-		// "Mini DFS 1st edge:" << minidfs_first_edge_set << endl <<
-		// "Mini DFS 2nd edge:" << minidfs_second_edge_set << endl <<
-		// "Building Mini DFS time:" << building_minidfs_time << endl;
-
 	}
 
 	void execute_reg() {
@@ -1143,6 +1116,7 @@ private:
 		uint32_t u, v;
 		int64_t timestamp;
 
+		insertion_operations.reserve(logg.insertion_operations_cnt);
 		while (infile >> u >> v >> timestamp) {
 			insertion_operations.push_back(
 				Operation(false, make_pair(u, v), timestamp));
